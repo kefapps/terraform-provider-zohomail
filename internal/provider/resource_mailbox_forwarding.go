@@ -215,67 +215,125 @@ func (r *mailboxForwardingResource) ImportState(ctx context.Context, req resourc
 func (r *mailboxForwardingResource) applyForwarding(ctx context.Context, state mailboxForwardingResourceModel, plan mailboxForwardingResourceModel) (mailboxForwardingResourceModel, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
-	targets, targetDiags := stringSliceFromSet(ctx, plan.TargetAddresses)
-	diags.Append(targetDiags...)
-	if diags.HasError() {
+	targets, mailbox, deleteCopy, ok := r.prepareForwarding(ctx, state, plan, &diags)
+	if !ok {
 		return mailboxForwardingResourceModel{}, diags
 	}
 
-	if len(targets) == 0 {
-		diags.AddError("Missing forwarding targets", "At least one `target_addresses` entry is required.")
+	if ok := r.syncRemovedForwardingTargets(ctx, mailbox, state, targets, &diags); !ok {
 		return mailboxForwardingResourceModel{}, diags
 	}
 
-	if len(targets) > 3 {
-		diags.AddError("Too many forwarding targets", "Zoho Mail supports at most three forwarding targets per mailbox.")
+	if ok := r.syncAddedForwardingTargets(ctx, mailbox, state, targets, &diags); !ok {
 		return mailboxForwardingResourceModel{}, diags
 	}
 
-	mailbox, err := r.client.GetMailbox(ctx, plan.MailboxID.ValueString())
-	if err != nil {
-		diags.AddError("Unable to load mailbox before configuring forwarding", err.Error())
-		return mailboxForwardingResourceModel{}, diags
-	}
-
-	if err := ensureForwardAddressesWithinMailboxDomains(targets, mailbox); err != nil {
-		diags.AddError("Unsupported forwarding target", err.Error())
-		return mailboxForwardingResourceModel{}, diags
-	}
-
-	currentTargets, currentDiags := stringSliceFromSet(ctx, state.TargetAddresses)
-	diags.Append(currentDiags...)
-	if diags.HasError() {
-		return mailboxForwardingResourceModel{}, diags
-	}
-
-	for _, address := range difference(currentTargets, targets) {
-		if err := r.client.DisableMailboxForward(ctx, mailbox, address); err != nil && !zohomail.IsNotFound(err) {
-			diags.AddError("Unable to disable mailbox forwarding target", err.Error())
-			return mailboxForwardingResourceModel{}, diags
-		}
-		if err := r.client.DeleteMailboxForward(ctx, mailbox, address); err != nil && !zohomail.IsNotFound(err) {
-			diags.AddError("Unable to delete mailbox forwarding target", err.Error())
-			return mailboxForwardingResourceModel{}, diags
-		}
-	}
-
-	for _, address := range difference(targets, currentTargets) {
-		if err := r.client.AddMailboxForward(ctx, mailbox, address); err != nil {
-			diags.AddError("Unable to add mailbox forwarding target", err.Error())
-			return mailboxForwardingResourceModel{}, diags
-		}
-		if err := r.client.EnableMailboxForward(ctx, mailbox, address); err != nil {
-			diags.AddError("Unable to enable mailbox forwarding target", err.Error())
-			return mailboxForwardingResourceModel{}, diags
-		}
-	}
-
-	deleteCopy := !plan.DeleteZohoMailCopy.IsNull() && !plan.DeleteZohoMailCopy.IsUnknown() && plan.DeleteZohoMailCopy.ValueBool()
 	if err := r.client.SetDeleteZohoMailCopy(ctx, mailbox, deleteCopy); err != nil {
 		diags.AddError("Unable to update delete_zoho_mail_copy", err.Error())
 		return mailboxForwardingResourceModel{}, diags
 	}
 
+	return r.refreshForwardingState(ctx, plan, mailbox, targets, deleteCopy, diags)
+}
+
+func (r *mailboxForwardingResource) prepareForwarding(
+	ctx context.Context,
+	state mailboxForwardingResourceModel,
+	plan mailboxForwardingResourceModel,
+	diags *diag.Diagnostics,
+) ([]string, *zohomail.Mailbox, bool, bool) {
+	targets, targetDiags := stringSliceFromSet(ctx, plan.TargetAddresses)
+	diags.Append(targetDiags...)
+	if diags.HasError() {
+		return nil, nil, false, false
+	}
+
+	if len(targets) == 0 {
+		diags.AddError("Missing forwarding targets", "At least one `target_addresses` entry is required.")
+		return nil, nil, false, false
+	}
+
+	if len(targets) > 3 {
+		diags.AddError("Too many forwarding targets", "Zoho Mail supports at most three forwarding targets per mailbox.")
+		return nil, nil, false, false
+	}
+
+	mailbox, err := r.client.GetMailbox(ctx, plan.MailboxID.ValueString())
+	if err != nil {
+		diags.AddError("Unable to load mailbox before configuring forwarding", err.Error())
+		return nil, nil, false, false
+	}
+
+	if err := ensureForwardAddressesWithinMailboxDomains(targets, mailbox); err != nil {
+		diags.AddError("Unsupported forwarding target", err.Error())
+		return nil, nil, false, false
+	}
+
+	return targets, mailbox, valueBool(plan.DeleteZohoMailCopy), true
+}
+
+func (r *mailboxForwardingResource) syncRemovedForwardingTargets(
+	ctx context.Context,
+	mailbox *zohomail.Mailbox,
+	state mailboxForwardingResourceModel,
+	targets []string,
+	diags *diag.Diagnostics,
+) bool {
+	currentTargets, currentDiags := stringSliceFromSet(ctx, state.TargetAddresses)
+	diags.Append(currentDiags...)
+	if diags.HasError() {
+		return false
+	}
+
+	for _, address := range difference(currentTargets, targets) {
+		if err := r.client.DisableMailboxForward(ctx, mailbox, address); err != nil && !zohomail.IsNotFound(err) {
+			diags.AddError("Unable to disable mailbox forwarding target", err.Error())
+			return false
+		}
+		if err := r.client.DeleteMailboxForward(ctx, mailbox, address); err != nil && !zohomail.IsNotFound(err) {
+			diags.AddError("Unable to delete mailbox forwarding target", err.Error())
+			return false
+		}
+	}
+
+	return true
+}
+
+func (r *mailboxForwardingResource) syncAddedForwardingTargets(
+	ctx context.Context,
+	mailbox *zohomail.Mailbox,
+	state mailboxForwardingResourceModel,
+	targets []string,
+	diags *diag.Diagnostics,
+) bool {
+	currentTargets, currentDiags := stringSliceFromSet(ctx, state.TargetAddresses)
+	diags.Append(currentDiags...)
+	if diags.HasError() {
+		return false
+	}
+
+	for _, address := range difference(targets, currentTargets) {
+		if err := r.client.AddMailboxForward(ctx, mailbox, address); err != nil {
+			diags.AddError("Unable to add mailbox forwarding target", err.Error())
+			return false
+		}
+		if err := r.client.EnableMailboxForward(ctx, mailbox, address); err != nil {
+			diags.AddError("Unable to enable mailbox forwarding target", err.Error())
+			return false
+		}
+	}
+
+	return true
+}
+
+func (r *mailboxForwardingResource) refreshForwardingState(
+	ctx context.Context,
+	plan mailboxForwardingResourceModel,
+	mailbox *zohomail.Mailbox,
+	targets []string,
+	deleteCopy bool,
+	diags diag.Diagnostics,
+) (mailboxForwardingResourceModel, diag.Diagnostics) {
 	nextState := mailboxForwardingResourceModel{
 		AccountID:          types.StringValue(mailbox.AccountID),
 		DeleteZohoMailCopy: types.BoolValue(deleteCopy),
@@ -285,15 +343,7 @@ func (r *mailboxForwardingResource) applyForwarding(ctx context.Context, state m
 
 	remoteForwards, err := r.client.GetMailboxForwarding(ctx, mailbox.AccountID)
 	if err == nil {
-		remoteTargets := make([]string, 0, len(remoteForwards))
-		for _, forward := range remoteForwards {
-			remoteTargets = append(remoteTargets, forward.Email)
-			nextState.DeleteZohoMailCopy = types.BoolValue(forward.DeleteCopy)
-		}
-
-		setValue, setDiags := setValueFromStrings(ctx, remoteTargets)
-		diags.Append(setDiags...)
-		nextState.TargetAddresses = setValue
+		r.updateForwardingStateFromRemote(ctx, &nextState, remoteForwards, &diags)
 		return nextState, diags
 	}
 
@@ -306,6 +356,23 @@ func (r *mailboxForwardingResource) applyForwarding(ctx context.Context, state m
 	diags.Append(setDiags...)
 	nextState.TargetAddresses = setValue
 	return nextState, diags
+}
+
+func (r *mailboxForwardingResource) updateForwardingStateFromRemote(
+	ctx context.Context,
+	state *mailboxForwardingResourceModel,
+	forwards []zohomail.MailForward,
+	diags *diag.Diagnostics,
+) {
+	remoteTargets := make([]string, 0, len(forwards))
+	for _, forward := range forwards {
+		remoteTargets = append(remoteTargets, forward.Email)
+		state.DeleteZohoMailCopy = types.BoolValue(forward.DeleteCopy)
+	}
+
+	setValue, setDiags := setValueFromStrings(ctx, remoteTargets)
+	diags.Append(setDiags...)
+	state.TargetAddresses = setValue
 }
 
 func difference(left []string, right []string) []string {

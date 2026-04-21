@@ -118,6 +118,7 @@ func (r *domainSubdomainStrippingResource) Read(ctx context.Context, req resourc
 }
 
 func (r *domainSubdomainStrippingResource) Update(context.Context, resource.UpdateRequest, *resource.UpdateResponse) {
+	// No-op: the resource only models the enabled state and replacement is sufficient for lifecycle changes.
 }
 
 func (r *domainSubdomainStrippingResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

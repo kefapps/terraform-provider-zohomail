@@ -38,3 +38,30 @@ func TestBaseURLForDataCenterUnsupported(t *testing.T) {
 		t.Fatal("expected unsupported data center to fail")
 	}
 }
+
+func TestSupportedDataCenters(t *testing.T) {
+	t.Parallel()
+
+	got := SupportedDataCenters()
+	if len(got) != 9 {
+		t.Fatalf("unexpected supported data centers: %#v", got)
+	}
+	if got[0] != "ae" || got[len(got)-1] != "us" {
+		t.Fatalf("expected sorted supported data centers, got %#v", got)
+	}
+}
+
+func TestAPIErrorMessage(t *testing.T) {
+	t.Parallel()
+
+	err := (&APIError{
+		Description: "missing",
+		Message:     "not found",
+		StatusCode:  404,
+		ZohoCode:    404,
+	}).Error()
+
+	if err == "" {
+		t.Fatal("expected api error string to be populated")
+	}
+}

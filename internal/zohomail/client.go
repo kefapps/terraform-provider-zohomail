@@ -560,25 +560,9 @@ func (c *Client) DisableSubdomainStripping(ctx context.Context, domainName strin
 }
 
 func (c *Client) doJSON(ctx context.Context, method string, endpoint string, payload any, out any) error {
-	var body io.Reader
-	if payload != nil {
-		rawPayload, err := json.Marshal(payload)
-		if err != nil {
-			return fmt.Errorf("marshal zoho mail request: %w", err)
-		}
-
-		body = bytes.NewReader(rawPayload)
-	}
-
-	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+endpoint, body)
+	request, err := c.newRequest(ctx, method, endpoint, payload)
 	if err != nil {
-		return fmt.Errorf("create zoho mail request: %w", err)
-	}
-
-	request.Header.Set("Accept", "application/json")
-	request.Header.Set("Authorization", "Zoho-oauthtoken "+c.accessToken)
-	if payload != nil {
-		request.Header.Set("Content-Type", "application/json")
+		return err
 	}
 
 	response, err := c.httpClient.Do(request)
@@ -592,15 +576,8 @@ func (c *Client) doJSON(ctx context.Context, method string, endpoint string, pay
 		return fmt.Errorf("read zoho mail response: %w", err)
 	}
 
-	if len(bytes.TrimSpace(rawBody)) == 0 {
-		if response.StatusCode >= http.StatusBadRequest {
-			return &APIError{
-				Description: response.Status,
-				StatusCode:  response.StatusCode,
-			}
-		}
-
-		return nil
+	if err := emptyBodyError(response.StatusCode, response.Status, rawBody); err != nil {
+		return err
 	}
 
 	var envelope apiEnvelope
@@ -609,17 +586,7 @@ func (c *Client) doJSON(ctx context.Context, method string, endpoint string, pay
 	}
 
 	if response.StatusCode >= http.StatusBadRequest || envelope.Status.Code >= http.StatusBadRequest {
-		statusCode := response.StatusCode
-		if envelope.Status.Code != 0 {
-			statusCode = envelope.Status.Code
-		}
-
-		return &APIError{
-			Description: envelope.Status.Description,
-			Message:     envelope.Status.Message,
-			StatusCode:  statusCode,
-			ZohoCode:    envelope.Status.Code,
-		}
+		return apiErrorFromEnvelope(response.StatusCode, envelope.Status)
 	}
 
 	if out == nil || len(bytes.TrimSpace(envelope.Data)) == 0 || bytes.Equal(bytes.TrimSpace(envelope.Data), []byte("null")) {
@@ -631,6 +598,67 @@ func (c *Client) doJSON(ctx context.Context, method string, endpoint string, pay
 	}
 
 	return nil
+}
+
+func (c *Client) newRequest(ctx context.Context, method string, endpoint string, payload any) (*http.Request, error) {
+	body, hasPayload, err := marshalBody(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+endpoint, body)
+	if err != nil {
+		return nil, fmt.Errorf("create zoho mail request: %w", err)
+	}
+
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Authorization", "Zoho-oauthtoken "+c.accessToken)
+	if hasPayload {
+		request.Header.Set("Content-Type", "application/json")
+	}
+
+	return request, nil
+}
+
+func marshalBody(payload any) (io.Reader, bool, error) {
+	if payload == nil {
+		return nil, false, nil
+	}
+
+	rawPayload, err := json.Marshal(payload)
+	if err != nil {
+		return nil, false, fmt.Errorf("marshal zoho mail request: %w", err)
+	}
+
+	return bytes.NewReader(rawPayload), true, nil
+}
+
+func emptyBodyError(statusCode int, status string, rawBody []byte) error {
+	if len(bytes.TrimSpace(rawBody)) != 0 {
+		return nil
+	}
+
+	if statusCode >= http.StatusBadRequest {
+		return &APIError{
+			Description: status,
+			StatusCode:  statusCode,
+		}
+	}
+
+	return nil
+}
+
+func apiErrorFromEnvelope(statusCode int, status apiStatus) error {
+	if status.Code != 0 {
+		statusCode = status.Code
+	}
+
+	return &APIError{
+		Description: status.Description,
+		Message:     status.Message,
+		StatusCode:  statusCode,
+		ZohoCode:    status.Code,
+	}
 }
 
 func (c *Client) orgPath(parts ...string) string {
@@ -668,34 +696,52 @@ func convertMailbox(raw mailboxResponse) *Mailbox {
 		ZUID:           strings.TrimSpace(raw.ZUID),
 	}
 
-	for _, email := range raw.EmailAddress {
+	result.EmailAddresses, result.MailboxAddress = convertEmailAddresses(raw.EmailAddress, result.MailboxAddress)
+	result.MailForwards = convertMailForwards(raw.MailForward)
+
+	return result
+}
+
+func convertEmailAddresses(emails []emailAddress, mailboxAddress string) ([]string, string) {
+	addresses := make([]string, 0, len(emails))
+
+	for _, email := range emails {
 		address := strings.TrimSpace(email.MailID)
 		if address == "" {
 			continue
 		}
 
-		result.EmailAddresses = append(result.EmailAddresses, address)
-		if email.IsPrimary && result.MailboxAddress == "" {
-			result.MailboxAddress = address
+		addresses = append(addresses, address)
+		if email.IsPrimary && mailboxAddress == "" {
+			mailboxAddress = address
 		}
 	}
 
-	if len(bytes.TrimSpace(raw.MailForward)) > 0 && !bytes.Equal(bytes.TrimSpace(raw.MailForward), []byte("null")) {
-		var forwards []mailForward
-		if err := json.Unmarshal(raw.MailForward, &forwards); err == nil {
-			for _, forward := range forwards {
-				address := strings.TrimSpace(forward.MailForward)
-				if address == "" {
-					continue
-				}
+	return addresses, mailboxAddress
+}
 
-				result.MailForwards = append(result.MailForwards, MailForward{
-					DeleteCopy: forward.DeleteCopy,
-					Email:      address,
-					Status:     statusString(forward.Status),
-				})
-			}
+func convertMailForwards(raw json.RawMessage) []MailForward {
+	if len(bytes.TrimSpace(raw)) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil
+	}
+
+	var forwards []mailForward
+	if err := json.Unmarshal(raw, &forwards); err != nil {
+		return nil
+	}
+
+	result := make([]MailForward, 0, len(forwards))
+	for _, forward := range forwards {
+		address := strings.TrimSpace(forward.MailForward)
+		if address == "" {
+			continue
 		}
+
+		result = append(result, MailForward{
+			DeleteCopy: forward.DeleteCopy,
+			Email:      address,
+			Status:     statusString(forward.Status),
+		})
 	}
 
 	return result

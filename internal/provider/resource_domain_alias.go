@@ -116,6 +116,7 @@ func (r *domainAliasResource) Read(ctx context.Context, req resource.ReadRequest
 }
 
 func (r *domainAliasResource) Update(context.Context, resource.UpdateRequest, *resource.UpdateResponse) {
+	// No-op: both schema attributes require replacement, so Terraform never plans an in-place update.
 }
 
 func (r *domainAliasResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {

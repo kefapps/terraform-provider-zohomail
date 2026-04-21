@@ -58,3 +58,17 @@ func TestStringValueFromConfig(t *testing.T) {
 		t.Fatalf("expected env fallback, got %q", got)
 	}
 }
+
+func TestProviderRegistrations(t *testing.T) {
+	t.Parallel()
+
+	p := &zohoMailProvider{}
+
+	if got := len(p.Resources(context.Background())); got != 9 {
+		t.Fatalf("expected 9 resources, got %d", got)
+	}
+
+	if got := len(p.DataSources(context.Background())); got != 0 {
+		t.Fatalf("expected no data sources, got %d", got)
+	}
+}

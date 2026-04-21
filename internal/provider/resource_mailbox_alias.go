@@ -118,6 +118,7 @@ func (r *mailboxAliasResource) Read(ctx context.Context, req resource.ReadReques
 }
 
 func (r *mailboxAliasResource) Update(context.Context, resource.UpdateRequest, *resource.UpdateResponse) {
+	// No-op: both schema attributes require replacement, so Terraform never plans an in-place update.
 }
 
 func (r *mailboxAliasResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
