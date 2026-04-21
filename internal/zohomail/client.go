@@ -226,6 +226,30 @@ type rawDKIM struct {
 	Selector   string `json:"selector"`
 }
 
+type verificationResponse struct {
+	Error   string `json:"error"`
+	Message string `json:"message"`
+	Status  bool   `json:"status"`
+}
+
+type mxVerificationResponse struct {
+	Error    string `json:"error"`
+	Message  string `json:"message"`
+	MXStatus bool   `json:"mxstatus"`
+}
+
+type spfVerificationResponse struct {
+	Error     string `json:"error"`
+	Message   string `json:"message"`
+	SPFStatus bool   `json:"spfstatus"`
+}
+
+type dkimVerificationResponse struct {
+	DKIMStatus bool   `json:"dkimstatus"`
+	Error      string `json:"error"`
+	Message    string `json:"message"`
+}
+
 type Domain struct {
 	CNAMEVerificationCode string
 	CatchAllAddress       string
@@ -447,7 +471,7 @@ func (c *Client) DeleteDomain(ctx context.Context, domainName string) error {
 
 func (c *Client) VerifyDomain(ctx context.Context, domainName string, method string) error {
 	modeByMethod := map[string]string{
-		"cname": "verifyDomainByCNAME",
+		"cname": "verifyDomainByCName",
 		"html":  "verifyDomainByHTML",
 		"txt":   "verifyDomainByTXT",
 	}
@@ -457,7 +481,16 @@ func (c *Client) VerifyDomain(ctx context.Context, domainName string, method str
 		return fmt.Errorf("unsupported domain verification method %q", method)
 	}
 
-	return c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": mode}, nil)
+	var response verificationResponse
+	if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": mode}, &response); err != nil {
+		return err
+	}
+
+	if !response.Status {
+		return verificationFailure("domain", response.Message, response.Error)
+	}
+
+	return nil
 }
 
 func (c *Client) EnableMailHosting(ctx context.Context, domainName string) error {
@@ -465,11 +498,29 @@ func (c *Client) EnableMailHosting(ctx context.Context, domainName string) error
 }
 
 func (c *Client) VerifySPF(ctx context.Context, domainName string) error {
-	return c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "verifySpfRecord"}, nil)
+	var response spfVerificationResponse
+	if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "verifySpfRecord"}, &response); err != nil {
+		return err
+	}
+
+	if !response.SPFStatus {
+		return verificationFailure("SPF", response.Message, response.Error)
+	}
+
+	return nil
 }
 
 func (c *Client) VerifyMX(ctx context.Context, domainName string) error {
-	return c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "verifyMXRecord"}, nil)
+	var response mxVerificationResponse
+	if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "verifyMxRecord"}, &response); err != nil {
+		return err
+	}
+
+	if !response.MXStatus {
+		return verificationFailure("MX", response.Message, response.Error)
+	}
+
+	return nil
 }
 
 func (c *Client) SetPrimaryDomain(ctx context.Context, domainName string) error {
@@ -498,7 +549,7 @@ func (c *Client) CreateDKIM(ctx context.Context, input CreateDKIMInput) (*DKIMDe
 	payload := map[string]any{
 		"dkimType": "custom",
 		"hashType": input.HashType,
-		"mode":     "generateDkimKey",
+		"mode":     "addDkimDetail",
 		"selector": input.Selector,
 	}
 
@@ -514,7 +565,7 @@ func (c *Client) CreateDKIM(ctx context.Context, input CreateDKIMInput) (*DKIMDe
 func (c *Client) SetDefaultDKIM(ctx context.Context, domainName string, dkimID string) error {
 	payload := map[string]any{
 		"dkimId": dkimID,
-		"mode":   "setAsDefaultDkimKey",
+		"mode":   "makeDkimDefault",
 	}
 
 	return c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), payload, nil)
@@ -523,19 +574,44 @@ func (c *Client) SetDefaultDKIM(ctx context.Context, domainName string, dkimID s
 func (c *Client) VerifyDKIM(ctx context.Context, domainName string, dkimID string) error {
 	payload := map[string]any{
 		"dkimId": dkimID,
-		"mode":   "verifyDkimRecord",
+		"mode":   "verifyDkimKey",
 	}
 
-	return c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), payload, nil)
+	var response dkimVerificationResponse
+	if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), payload, &response); err != nil {
+		return err
+	}
+
+	if !response.DKIMStatus {
+		return verificationFailure("DKIM", response.Message, response.Error)
+	}
+
+	return nil
 }
 
 func (c *Client) DeleteDKIM(ctx context.Context, domainName string, dkimID string) error {
 	payload := map[string]any{
 		"dkimId": dkimID,
-		"mode":   "deleteDkimRecord",
+		"mode":   "deleteDkimDetail",
 	}
 
 	return c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), payload, nil)
+}
+
+func verificationFailure(kind string, message string, errorCode string) error {
+	message = strings.TrimSpace(message)
+	errorCode = strings.TrimSpace(errorCode)
+
+	switch {
+	case message != "" && errorCode != "":
+		return fmt.Errorf("zoho mail %s verification failed: %s (%s)", kind, message, errorCode)
+	case message != "":
+		return fmt.Errorf("zoho mail %s verification failed: %s", kind, message)
+	case errorCode != "":
+		return fmt.Errorf("zoho mail %s verification failed: %s", kind, errorCode)
+	default:
+		return fmt.Errorf("zoho mail %s verification failed", kind)
+	}
 }
 
 func (c *Client) SetCatchAll(ctx context.Context, domainName string, address string) error {
