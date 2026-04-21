@@ -1,0 +1,36 @@
+// Copyright (c) 2026 Kefjbo
+// SPDX-License-Identifier: MPL-2.0
+
+package provider
+
+import (
+	"os"
+	"testing"
+
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+)
+
+var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
+	"zohomail": providerserver.NewProtocol6WithError(New("test")()),
+}
+
+func TestAccProviderSmoke(t *testing.T) {
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("acceptance tests skipped unless TF_ACC=1")
+	}
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccProviderSmokeConfig,
+			},
+		},
+	})
+}
+
+const testAccProviderSmokeConfig = `
+provider "zohomail" {}
+`

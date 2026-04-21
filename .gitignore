@@ -1,0 +1,8 @@
+.DS_Store
+.idea/
+.terraform/
+.terraform.lock.hcl
+bin/
+coverage.out
+dist/
+terraform-provider-zohomail

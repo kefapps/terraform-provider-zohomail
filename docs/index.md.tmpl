@@ -1,0 +1,32 @@
+---
+page_title: "zohomail Provider"
+subcategory: ""
+description: |-
+  Terraform provider bootstrap for Zoho Mail.
+---
+
+# zohomail Provider
+
+The `zohomail` provider bootstrap establishes the standalone Terraform provider for Zoho Mail under the public source address `kefjbo/zohomail`.
+
+This initial version intentionally focuses on provider scaffolding only:
+
+- standalone project structure compatible with Terraform Registry
+- local build, install, and documentation generation workflow
+- clean extension points for future Zoho Mail authentication and resources
+
+No provider configuration arguments, resources, or data sources are exposed yet. Those are introduced in follow-up work once the Zoho Mail API surface is locked.
+
+## Example Usage
+
+```terraform
+terraform {
+  required_providers {
+    zohomail = {
+      source = "kefjbo/zohomail"
+    }
+  }
+}
+
+provider "zohomail" {}
+```
