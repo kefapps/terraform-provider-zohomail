@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     zohomail = {
-      source = "kefjbo/zohomail"
+      source = "kefapps/zohomail"
     }
   }
 }

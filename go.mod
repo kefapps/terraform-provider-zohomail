@@ -1,4 +1,4 @@
-module github.com/kefjbo/terraform-provider-zohomail
+module github.com/kefapps/terraform-provider-zohomail
 
 go 1.25.8
 

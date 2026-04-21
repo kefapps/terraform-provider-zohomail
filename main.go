@@ -10,7 +10,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"github.com/kefjbo/terraform-provider-zohomail/internal/provider"
+	"github.com/kefapps/terraform-provider-zohomail/internal/provider"
 )
 
 // Run "go generate" to format the Terraform examples and regenerate Registry docs.
@@ -26,7 +26,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/kefjbo/zohomail",
+		Address: "registry.terraform.io/kefapps/zohomail",
 		Debug:   debug,
 	}
 

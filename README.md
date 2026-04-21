@@ -4,7 +4,7 @@
 
 This repository intentionally starts with a minimal HashiCorp Plugin Framework scaffold:
 
-- provider source address: `kefjbo/zohomail`
+- provider source address: `kefapps/zohomail`
 - provider local name: `zohomail`
 - no provider authentication arguments yet
 - no Zoho Mail resources or data sources yet
@@ -13,7 +13,7 @@ The goal of this bootstrap is to lock the project structure, local workflows, do
 
 ## Requirements
 
-- Go `>= 1.25`
+- Go `>= 1.25.8`
 - Terraform `>= 1.14`
 
 ## Build and Test
@@ -41,12 +41,14 @@ Install the provider binary into your Go bin directory:
 make install
 ```
 
-For local Terraform development, use a CLI config file with a development override:
+For local Terraform development, install the provider binary and point Terraform to the directory that contains it. If `GOBIN` is unset, this is usually `$(go env GOPATH)/bin`.
+
+Use a CLI config file with a development override:
 
 ```hcl
 provider_installation {
   dev_overrides {
-    "kefjbo/zohomail" = "/path/to/your/go/bin"
+    "kefapps/zohomail" = "/path/to/your/go/bin"
   }
 
   direct {}
@@ -59,13 +61,15 @@ Then use the provider in Terraform:
 terraform {
   required_providers {
     zohomail = {
-      source = "kefjbo/zohomail"
+      source = "kefapps/zohomail"
     }
   }
 }
 
 provider "zohomail" {}
 ```
+
+For an unpublished provider, use `terraform plan` or `terraform apply` directly once the `dev_overrides` entry is in place. Do not rely on `terraform init` to install `kefapps/zohomail` from the public Registry before the provider is published there, because Terraform will still try to resolve the source address remotely.
 
 ## Documentation
 
@@ -75,4 +79,4 @@ Provider documentation is generated with `tfplugindocs`:
 make generate
 ```
 
-The provider index template lives in `docs/index.md.tmpl` and the generated Registry markdown is written to `docs/`.
+The provider index template lives in `templates/index.md.tmpl` and the generated Registry markdown is written to `docs/`.
