@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/provider"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 func TestProviderMetadata(t *testing.T) {
@@ -39,7 +40,21 @@ func TestProviderSchema(t *testing.T) {
 		t.Fatal("expected provider schema markdown description to be set")
 	}
 
-	if got := len(resp.Schema.Attributes); got != 0 {
-		t.Fatalf("expected no provider attributes at bootstrap, got %d", got)
+	if got := len(resp.Schema.Attributes); got != 3 {
+		t.Fatalf("expected 3 provider attributes, got %d", got)
+	}
+}
+
+func TestStringValueFromConfig(t *testing.T) {
+	const envKey = "ZOHOMAIL_TEST_FALLBACK"
+
+	t.Setenv(envKey, "env-value")
+
+	if got := stringValueFromConfig(types.StringValue("explicit"), envKey); got != "explicit" {
+		t.Fatalf("expected explicit value to win, got %q", got)
+	}
+
+	if got := stringValueFromConfig(types.StringNull(), envKey); got != "env-value" {
+		t.Fatalf("expected env fallback, got %q", got)
 	}
 }

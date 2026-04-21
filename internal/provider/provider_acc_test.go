@@ -17,11 +17,8 @@ var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServe
 }
 
 func TestAccProviderSmoke(t *testing.T) {
-	if os.Getenv("TF_ACC") == "" {
-		t.Skip("acceptance tests skipped unless TF_ACC=1")
-	}
-
 	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -29,6 +26,20 @@ func TestAccProviderSmoke(t *testing.T) {
 			},
 		},
 	})
+}
+
+func testAccPreCheck(t *testing.T) {
+	t.Helper()
+
+	if os.Getenv("TF_ACC") == "" {
+		t.Skip("acceptance tests skipped unless TF_ACC=1")
+	}
+
+	for _, key := range []string{envAccessToken, envDataCenter, envOrganizationID} {
+		if os.Getenv(key) == "" {
+			t.Skip("acceptance tests require " + key)
+		}
+	}
 }
 
 const testAccProviderSmokeConfig = `

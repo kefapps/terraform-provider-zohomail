@@ -1,15 +1,8 @@
 # terraform-provider-zohomail
 
-`terraform-provider-zohomail` is a standalone Terraform provider bootstrap for **Zoho Mail only**.
+`terraform-provider-zohomail` is a standalone Terraform provider for **Zoho Mail only**.
 
-This repository intentionally starts with a minimal HashiCorp Plugin Framework scaffold:
-
-- provider source address: `kefapps/zohomail`
-- provider local name: `zohomail`
-- no provider authentication arguments yet
-- no Zoho Mail resources or data sources yet
-
-The goal of this bootstrap is to lock the project structure, local workflows, documentation generation, and Terraform Registry compatibility before implementing the Zoho Mail API surface.
+This repository targets the public provider source address `kefapps/zohomail` and implements an admin-focused v1 surface on top of the official Zoho Mail APIs.
 
 ## Requirements
 
@@ -25,13 +18,57 @@ make build
 make generate
 ```
 
-The acceptance entrypoint already exists:
+The acceptance entrypoint exists for live Zoho Mail environments:
 
 ```bash
 make testacc
 ```
 
-At bootstrap stage, `make testacc` runs a provider smoke test only. Real Zoho Mail acceptance scenarios will be added once provider configuration and resources exist.
+## Provider Configuration
+
+```terraform
+terraform {
+  required_providers {
+    zohomail = {
+      source = "kefapps/zohomail"
+    }
+  }
+}
+
+provider "zohomail" {
+  organization_id = var.zohomail_organization_id
+  access_token    = var.zohomail_access_token
+  data_center     = var.zohomail_data_center
+}
+```
+
+All three arguments also support environment fallbacks:
+
+- `ZOHOMAIL_ORGANIZATION_ID`
+- `ZOHOMAIL_ACCESS_TOKEN`
+- `ZOHOMAIL_DATA_CENTER`
+
+Supported `data_center` values are: `us`, `eu`, `in`, `au`, `jp`, `ca`, `cn`, `ae`, `sa`.
+
+## V1 Resources
+
+- `zohomail_mailbox`
+- `zohomail_mailbox_alias`
+- `zohomail_mailbox_forwarding`
+- `zohomail_domain`
+- `zohomail_domain_onboarding`
+- `zohomail_domain_alias`
+- `zohomail_domain_dkim`
+- `zohomail_domain_catch_all`
+- `zohomail_domain_subdomain_stripping`
+
+The user-facing need “plusieurs adresses du même domaine arrivent sur un seul compte” is handled primarily via `zohomail_mailbox_alias`.
+
+`zohomail_mailbox_forwarding` is intentionally narrower in v1:
+
+- it manages forwarding targets for a mailbox
+- it only accepts target addresses that belong to domains already attached to that mailbox
+- it does not attempt external forwarding verification flows
 
 ## Install Locally
 
@@ -66,10 +103,30 @@ terraform {
   }
 }
 
-provider "zohomail" {}
+provider "zohomail" {
+  organization_id = var.zohomail_organization_id
+  access_token    = var.zohomail_access_token
+  data_center     = var.zohomail_data_center
+}
 ```
 
 For an unpublished provider, use `terraform plan` or `terraform apply` directly once the `dev_overrides` entry is in place. Do not rely on `terraform init` to install `kefapps/zohomail` from the public Registry before the provider is published there, because Terraform will still try to resolve the source address remotely.
+
+## Local Sonar Quality Gate
+
+This repository follows the same local quality-gate discipline as `../goose/keftionnaire`:
+
+- `make sonar-local`: local Sonar scan for work-in-progress debugging
+- `make quality`: strict local certification on a clean worktree, intended before push
+- `make quality-status`: inspect the local SonarQube stack state
+- `make quality-reset`: stop and clean the local SonarQube stack state
+
+`make quality` is mandatory before push. It:
+
+- refuses a dirty worktree
+- generates Go coverage
+- boots a local SonarQube stack through Docker Compose
+- waits for the local quality gate result
 
 ## Documentation
 
