@@ -147,7 +147,7 @@ func (r *domainResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	domain, err := r.client.GetDomain(ctx, state.DomainName.ValueString())
+	nextState, err := r.refreshState(ctx, state)
 	if zohomail.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
@@ -157,15 +157,28 @@ func (r *domainResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, domainStateFromRemote(state, domain))...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, nextState)...)
 }
 
 func (r *domainResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	r.Read(ctx, resource.ReadRequest{State: req.State}, &resource.ReadResponse{
-		State:       resp.State,
-		Diagnostics: resp.Diagnostics,
-		Private:     resp.Private,
-	})
+	var plan domainResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	nextState, err := r.refreshState(ctx, plan)
+	if zohomail.IsNotFound(err) {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to read Zoho Mail domain", err.Error())
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, nextState)...)
 }
 
 func (r *domainResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -217,4 +230,13 @@ func defaultDKIMStatus(domain *zohomail.Domain) string {
 	}
 
 	return ""
+}
+
+func (r *domainResource) refreshState(ctx context.Context, current domainResourceModel) (domainResourceModel, error) {
+	domain, err := r.client.GetDomain(ctx, current.DomainName.ValueString())
+	if err != nil {
+		return domainResourceModel{}, err
+	}
+
+	return domainStateFromRemote(current, domain), nil
 }
