@@ -1,20 +1,22 @@
 ---
 page_title: "zohomail Provider"
 description: |-
-  Terraform provider bootstrap for Zoho Mail.
+  Terraform provider for Zoho Mail administration.
 ---
 
 # zohomail Provider
 
-The `zohomail` provider bootstrap establishes the standalone Terraform provider for Zoho Mail under the public source address `kefapps/zohomail`.
+The `zohomail` provider manages Zoho Mail administration objects under the public source address `kefapps/zohomail`.
 
-This initial version intentionally focuses on provider scaffolding only:
+The current v1 surface focuses on mailbox and domain administration:
 
-- standalone project structure compatible with Terraform Registry
-- local build, install, and documentation generation workflow
-- clean extension points for future Zoho Mail authentication and resources
-
-No provider configuration arguments, resources, or data sources are exposed yet. Those are introduced in follow-up work once the Zoho Mail API surface is locked.
+- mailbox creation
+- mailbox aliases and internal forwarding
+- domain creation and onboarding
+- domain aliases
+- DKIM
+- catch-all
+- subdomain stripping
 
 ## Example Usage
 
@@ -27,5 +29,20 @@ terraform {
   }
 }
 
-provider "zohomail" {}
+provider "zohomail" {
+  organization_id = var.zohomail_organization_id
+  access_token    = var.zohomail_access_token
+  data_center     = var.zohomail_data_center
+}
 ```
+
+## Environment Variables
+
+- `ZOHOMAIL_ORGANIZATION_ID`
+- `ZOHOMAIL_ACCESS_TOKEN`
+- `ZOHOMAIL_DATA_CENTER`
+
+## Notes
+
+- `zohomail_mailbox_alias` is the primary v1 answer for routing several addresses from the same domain to one mailbox.
+- `zohomail_mailbox_forwarding` is intentionally limited to domains already attached to the mailbox and does not automate external verification workflows.

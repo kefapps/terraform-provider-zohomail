@@ -2,7 +2,10 @@
 .idea/
 .terraform/
 .terraform.lock.hcl
+.scannerwork/
+.sonarqube-local/
 bin/
 coverage.out
 dist/
+reports/
 terraform-provider-zohomail
