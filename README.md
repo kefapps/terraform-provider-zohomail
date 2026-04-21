@@ -16,13 +16,51 @@ make fmt
 make test
 make build
 make generate
+go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate
 ```
+
+This is the default local validation gate for normal provider work. There is no GitHub Actions CI gate yet.
+
+## Acceptance Tests
 
 The acceptance entrypoint exists for live Zoho Mail environments:
 
 ```bash
 make testacc
 ```
+
+Acceptance runs are **local only** for now. They are expected when a change touches Zoho Mail API behavior, Terraform lifecycle, import handling, idempotence, or drift detection.
+
+Base acceptance environment:
+
+- `TF_ACC=1`
+- `ZOHOMAIL_ACCESS_TOKEN`
+- `ZOHOMAIL_DATA_CENTER`
+- `ZOHOMAIL_ORGANIZATION_ID`
+
+Domain and DNS acceptance environment:
+
+- `ZOHOMAIL_TEST_DNS_PROVIDER=cloudflare`
+- `ZOHOMAIL_TEST_DNS_ZONE_NAME`
+- `ZOHOMAIL_TEST_DNS_BASE_DOMAIN`
+- `CLOUDFLARE_API_TOKEN`
+
+Optional DNS tuning:
+
+- `ZOHOMAIL_TEST_DNS_RESOLVER`
+- `ZOHOMAIL_TEST_DNS_TIMEOUT`
+
+Canonical acceptance scenarios to keep covered as the provider evolves:
+
+- `zohomail_mailbox`: create, import, update `display_name`, update `role`, replacement on create-only fields
+- `zohomail_mailbox_alias`: create, import, delete, drift when alias disappears remotely
+- `zohomail_mailbox_forwarding`: create, update targets, update `delete_zoho_mail_copy`, import, delete, rejection of external domains
+- `zohomail_domain`: create, import, delete, refresh of verification and hosting state
+- `zohomail_domain_onboarding`: verify, hosting/SPF/MX/primary toggles, import, state-only delete
+- `zohomail_domain_alias`: create, import, delete
+- `zohomail_domain_dkim`: create, set default, verify, import, delete
+- `zohomail_domain_catch_all`: create, update, import, drift when catch-all disappears remotely
+- `zohomail_domain_subdomain_stripping`: create, import, delete
 
 ## Provider Configuration
 
@@ -121,7 +159,9 @@ This repository follows the same local quality-gate discipline as `../goose/keft
 - `make quality-status`: inspect the local SonarQube stack state
 - `make quality-reset`: stop and clean the local SonarQube stack state
 
-`make quality` is mandatory before push. It:
+These commands are available for local diagnosis and stricter manual certification. They are not the default repo gate and they are not mirrored in GitHub CI at this stage.
+
+`make quality`:
 
 - refuses a dirty worktree
 - generates Go coverage
@@ -137,3 +177,25 @@ make generate
 ```
 
 The provider index template lives in `templates/index.md.tmpl` and the generated Registry markdown is written to `docs/`.
+
+`examples/resources/*/resource.tf` are the canonical example snippets and should stay aligned with both schema behavior and generated docs.
+
+Operational runbooks:
+
+- `docs/ops/testing.md`
+- `docs/ops/release.md`
+
+## Release Policy
+
+Release automation is intentionally not in place yet:
+
+- no `.github/workflows` CI or release pipeline
+- no `.goreleaser.yml`
+- no automated Terraform Registry publication
+
+Current release posture:
+
+- keep `CHANGELOG.md` updated under `Unreleased`
+- keep docs/examples/generated markdown current on each provider change
+- treat future provider tags as `v*` semver tags cut from `main`
+- reserve the first public provider release for `v0.1.0` once the v1 acceptance matrix is implemented and documented
