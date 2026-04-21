@@ -78,7 +78,7 @@ func (r *domainDKIMResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Required:            true,
 				MarkdownDescription: "Hash type requested from Zoho Mail for the DKIM selector.",
 				PlanModifiers: []planmodifier.String{
-					dkimHashTypeRequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"make_default": schema.BoolAttribute{
@@ -269,20 +269,6 @@ func stateIDPart(id string, index int) string {
 	}
 
 	return parts[index]
-}
-
-func dkimHashTypeRequiresReplace() planmodifier.String {
-	return stringplanmodifier.RequiresReplaceIf(
-		func(_ context.Context, req planmodifier.StringRequest, resp *stringplanmodifier.RequiresReplaceIfFuncResponse) {
-			if req.StateValue.IsNull() || req.StateValue.IsUnknown() {
-				return
-			}
-
-			resp.RequiresReplace = true
-		},
-		"If the value of this attribute changes after creation, Terraform will destroy and recreate the resource.",
-		"If the value of this attribute changes after creation, Terraform will destroy and recreate the resource.",
-	)
 }
 
 func parseDomainDKIMImportID(raw string) (string, string, types.String, error) {

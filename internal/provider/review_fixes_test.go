@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -21,10 +22,10 @@ import (
 	"github.com/kefapps/terraform-provider-zohomail/internal/zohomail"
 )
 
-func TestDomainDKIMHashTypeRequiresReplaceAfterCreationOnly(t *testing.T) {
+func TestDomainDKIMHashTypeRequiresReplaceOnUnknownOrChangedState(t *testing.T) {
 	t.Parallel()
 
-	modifier := dkimHashTypeRequiresReplace()
+	modifier := stringplanmodifier.RequiresReplace()
 	req := planmodifier.StringRequest{
 		Plan: tfsdk.Plan{
 			Raw: tftypes.NewValue(tftypes.String, "planned"),
@@ -38,8 +39,15 @@ func TestDomainDKIMHashTypeRequiresReplaceAfterCreationOnly(t *testing.T) {
 
 	resp := &planmodifier.StringResponse{PlanValue: req.PlanValue}
 	modifier.PlanModifyString(context.Background(), req, resp)
+	if !resp.RequiresReplace {
+		t.Fatal("expected imported DKIM state without hash_type to require replacement")
+	}
+
+	req.StateValue = types.StringValue("sha256")
+	resp = &planmodifier.StringResponse{PlanValue: req.PlanValue}
+	modifier.PlanModifyString(context.Background(), req, resp)
 	if resp.RequiresReplace {
-		t.Fatal("expected imported DKIM state without hash_type to avoid replacement")
+		t.Fatal("expected matching hash_type to avoid replacement")
 	}
 
 	req.StateValue = types.StringValue("sha1")
