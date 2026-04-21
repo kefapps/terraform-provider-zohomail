@@ -208,6 +208,16 @@ func TestAccMailboxForwarding_rejectExternalDomains(t *testing.T) {
 	})
 }
 
+func TestTestAccMailboxEmailExpression(t *testing.T) {
+	t.Parallel()
+
+	got := testAccMailboxEmailExpression("support-abcd@example.com")
+	want := `"support-abcd@${zohomail_domain.test.domain_name}"`
+	if got != want {
+		t.Fatalf("unexpected mailbox email expression: got %s want %s", got, want)
+	}
+}
+
 func testAccMailboxConfig(domainName string, primaryEmail string, displayName string, role string, oneTimePassword bool) string {
 	return fmt.Sprintf(`
 %[1]s
@@ -217,7 +227,7 @@ resource "zohomail_domain" "test" {
 }
 
 resource "zohomail_mailbox" "test" {
-  primary_email_address = %[3]q
+  primary_email_address = %[3]s
   initial_password      = "Initial-passw0rd!"
   first_name            = "Support"
   last_name             = "Team"
@@ -228,7 +238,7 @@ resource "zohomail_mailbox" "test" {
   time_zone             = "Europe/Paris"
   one_time_password     = %[6]t
 }
-`, testAccProvidersConfig(false), domainName, primaryEmail, displayName, role, oneTimePassword)
+`, testAccProvidersConfig(false), domainName, testAccMailboxEmailExpression(primaryEmail), displayName, role, oneTimePassword)
 }
 
 func testAccMailboxAliasConfig(domainName string, mailboxEmail string, aliasEmail string) string {
@@ -240,7 +250,7 @@ resource "zohomail_domain" "test" {
 }
 
 resource "zohomail_mailbox" "test" {
-  primary_email_address = %[3]q
+  primary_email_address = %[3]s
   initial_password      = "Initial-passw0rd!"
   first_name            = "Support"
   last_name             = "Team"
@@ -255,7 +265,7 @@ resource "zohomail_mailbox_alias" "test" {
   mailbox_id  = zohomail_mailbox.test.id
   email_alias = %[4]q
 }
-`, testAccProvidersConfig(false), domainName, mailboxEmail, aliasEmail)
+`, testAccProvidersConfig(false), domainName, testAccMailboxEmailExpression(mailboxEmail), aliasEmail)
 }
 
 func testAccMailboxForwardingConfig(domainName string, sourceEmail string, salesEmail string, helloEmail string, targets []string, deleteCopy bool) string {
@@ -287,7 +297,7 @@ resource "zohomail_mailbox_forwarding" "test" {
 func testAccMailboxResourceBlock(name string, email string, displayName string) string {
 	return fmt.Sprintf(`
 resource "zohomail_mailbox" %q {
-  primary_email_address = %q
+  primary_email_address = %s
   initial_password      = "Initial-passw0rd!"
   first_name            = %q
   last_name             = "Team"
@@ -297,7 +307,16 @@ resource "zohomail_mailbox" %q {
   language              = "fr"
   time_zone             = "Europe/Paris"
 }
-`, name, email, displayName, displayName)
+`, name, testAccMailboxEmailExpression(email), displayName, displayName)
+}
+
+func testAccMailboxEmailExpression(email string) string {
+	parts := strings.SplitN(email, "@", 2)
+	if len(parts) != 2 || parts[0] == "" {
+		return fmt.Sprintf("%q", email)
+	}
+
+	return fmt.Sprintf("%q", parts[0]+"@${zohomail_domain.test.domain_name}")
 }
 
 func testAccHCLStringList(values []string) string {
