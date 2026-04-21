@@ -781,6 +781,10 @@ func convertDKIM(raw rawDKIM) DKIMDetail {
 }
 
 func stringValue(value any) string {
+	if value == nil {
+		return ""
+	}
+
 	switch typed := value.(type) {
 	case string:
 		return strings.TrimSpace(typed)
@@ -799,10 +803,6 @@ func stringValue(value any) string {
 
 func statusString(value any) string {
 	result := stringValue(value)
-	if result == "<nil>" {
-		return ""
-	}
-
 	return result
 }
 

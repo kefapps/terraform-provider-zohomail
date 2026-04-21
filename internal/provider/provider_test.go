@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/provider"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	resourceschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -70,5 +72,23 @@ func TestProviderRegistrations(t *testing.T) {
 
 	if got := len(p.DataSources(context.Background())); got != 0 {
 		t.Fatalf("expected no data sources, got %d", got)
+	}
+}
+
+func TestMailboxResourceSchemaOneTimePasswordRequiresReplace(t *testing.T) {
+	t.Parallel()
+
+	r := NewMailboxResource()
+	resp := &resource.SchemaResponse{}
+
+	r.Schema(context.Background(), resource.SchemaRequest{}, resp)
+
+	attr, ok := resp.Schema.Attributes["one_time_password"].(resourceschema.BoolAttribute)
+	if !ok {
+		t.Fatalf("expected one_time_password to be a BoolAttribute, got %T", resp.Schema.Attributes["one_time_password"])
+	}
+
+	if len(attr.PlanModifiers) == 0 {
+		t.Fatal("expected one_time_password to require replacement")
 	}
 }

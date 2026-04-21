@@ -129,3 +129,65 @@ func TestConfiguredClientAndAppendDiagnostics(t *testing.T) {
 		t.Fatal("expected appendSetDiagnostics to carry diagnostics forward")
 	}
 }
+
+func TestMailboxStateFromRemoteUsesRemoteCreateOnlyFields(t *testing.T) {
+	t.Parallel()
+
+	state, diags := mailboxStateFromRemote(context.Background(), mailboxResourceModel{
+		OneTimePassword: types.BoolNull(),
+	}, &zohomail.Mailbox{
+		AccountID:      "acc-1",
+		Country:        "FR",
+		DisplayName:    "Support Team",
+		EmailAddresses: []string{"support@example.com", "sales@example.com"},
+		FirstName:      "Support",
+		Language:       "fr",
+		LastName:       "Team",
+		MailboxAddress: "support@example.com",
+		MailboxStatus:  "active",
+		Role:           "member",
+		TimeZone:       "Europe/Paris",
+		ZUID:           "z-1",
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+
+	if got := state.Country.ValueString(); got != "FR" {
+		t.Fatalf("unexpected country: %q", got)
+	}
+	if got := state.FirstName.ValueString(); got != "Support" {
+		t.Fatalf("unexpected first_name: %q", got)
+	}
+	if got := state.Language.ValueString(); got != "fr" {
+		t.Fatalf("unexpected language: %q", got)
+	}
+	if got := state.LastName.ValueString(); got != "Team" {
+		t.Fatalf("unexpected last_name: %q", got)
+	}
+	if got := state.PrimaryEmailAddress.ValueString(); got != "support@example.com" {
+		t.Fatalf("unexpected primary_email_address: %q", got)
+	}
+	if got := state.TimeZone.ValueString(); got != "Europe/Paris" {
+		t.Fatalf("unexpected time_zone: %q", got)
+	}
+	if !state.OneTimePassword.IsNull() {
+		t.Fatalf("expected one_time_password to remain unknown after refresh, got %#v", state.OneTimePassword)
+	}
+}
+
+func TestResolvedCatchAllAddress(t *testing.T) {
+	t.Parallel()
+
+	if got := resolvedCatchAllAddress("catchall@example.com", types.StringValue("old@example.com"), false); got != "catchall@example.com" {
+		t.Fatalf("expected remote catch-all to win, got %q", got)
+	}
+
+	if got := resolvedCatchAllAddress("", types.StringValue("old@example.com"), true); got != "old@example.com" {
+		t.Fatalf("expected fallback catch-all to be preserved during create/update refresh, got %q", got)
+	}
+
+	if got := resolvedCatchAllAddress("", types.StringValue("old@example.com"), false); got != "" {
+		t.Fatalf("expected read refresh to surface missing remote catch-all, got %q", got)
+	}
+}

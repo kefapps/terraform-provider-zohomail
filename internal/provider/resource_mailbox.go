@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -126,7 +127,10 @@ func (r *mailboxResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 			},
 			"one_time_password": schema.BoolAttribute{
 				Optional:            true,
-				MarkdownDescription: "Whether the initial password must be changed on first login.",
+				MarkdownDescription: "Whether the initial password must be changed on first login. Evaluated only when the mailbox is created.",
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 			"account_id": schema.StringAttribute{
 				Computed:            true,
@@ -280,18 +284,26 @@ func mailboxStateFromRemote(ctx context.Context, current mailboxResourceModel, r
 
 	return mailboxResourceModel{
 		AccountID:           types.StringValue(remote.AccountID),
-		Country:             current.Country,
+		Country:             stringValueFromRemoteOrCurrent(remote.Country, current.Country),
 		DisplayName:         types.StringValue(remote.DisplayName),
 		EmailAddresses:      emailAddresses,
-		FirstName:           current.FirstName,
+		FirstName:           stringValueFromRemoteOrCurrent(remote.FirstName, current.FirstName),
 		ID:                  types.StringValue(remote.ZUID),
-		Language:            current.Language,
-		LastName:            current.LastName,
+		Language:            stringValueFromRemoteOrCurrent(remote.Language, current.Language),
+		LastName:            stringValueFromRemoteOrCurrent(remote.LastName, current.LastName),
 		MailboxAddress:      types.StringValue(remote.MailboxAddress),
 		MailboxStatus:       types.StringValue(remote.MailboxStatus),
 		OneTimePassword:     current.OneTimePassword,
-		PrimaryEmailAddress: current.PrimaryEmailAddress,
+		PrimaryEmailAddress: stringValueFromRemoteOrCurrent(remote.MailboxAddress, current.PrimaryEmailAddress),
 		Role:                types.StringValue(remote.Role),
-		TimeZone:            current.TimeZone,
+		TimeZone:            stringValueFromRemoteOrCurrent(remote.TimeZone, current.TimeZone),
 	}, diags
+}
+
+func stringValueFromRemoteOrCurrent(remote string, current types.String) types.String {
+	if remote != "" {
+		return types.StringValue(remote)
+	}
+
+	return current
 }

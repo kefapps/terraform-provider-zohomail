@@ -46,7 +46,7 @@ resource "zohomail_mailbox" "support" {
 
 ### Optional
 
-- `one_time_password` (Boolean) Whether the initial password must be changed on first login.
+- `one_time_password` (Boolean) Whether the initial password must be changed on first login. Evaluated only when the mailbox is created.
 
 ### Read-Only
 

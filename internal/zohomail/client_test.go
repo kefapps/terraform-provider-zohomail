@@ -65,3 +65,23 @@ func TestAPIErrorMessage(t *testing.T) {
 		t.Fatal("expected api error string to be populated")
 	}
 }
+
+func TestStringValueNil(t *testing.T) {
+	t.Parallel()
+
+	if got := stringValue(nil); got != "" {
+		t.Fatalf("expected nil string value to normalize to empty string, got %q", got)
+	}
+}
+
+func TestConvertDomainNilVerificationCodes(t *testing.T) {
+	t.Parallel()
+
+	domain := convertDomain(rawDomain{})
+	if domain.CNAMEVerificationCode != "" {
+		t.Fatalf("expected empty CNAME verification code, got %q", domain.CNAMEVerificationCode)
+	}
+	if domain.HTMLVerificationCode != "" {
+		t.Fatalf("expected empty HTML verification code, got %q", domain.HTMLVerificationCode)
+	}
+}

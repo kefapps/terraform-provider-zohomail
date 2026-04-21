@@ -80,7 +80,7 @@ func (r *domainCatchAllResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	nextState, err := r.refreshState(ctx, plan)
+	nextState, err := r.refreshState(ctx, plan, true)
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to refresh Zoho Mail catch-all address", err.Error())
 		return
@@ -97,7 +97,7 @@ func (r *domainCatchAllResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	nextState, err := r.refreshState(ctx, state)
+	nextState, err := r.refreshState(ctx, state, false)
 	if zohomail.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
@@ -128,7 +128,7 @@ func (r *domainCatchAllResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	nextState, err := r.refreshState(ctx, plan)
+	nextState, err := r.refreshState(ctx, plan, true)
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to refresh Zoho Mail catch-all address", err.Error())
 		return
@@ -155,20 +155,29 @@ func (r *domainCatchAllResource) ImportState(ctx context.Context, req resource.I
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("domain_name"), req.ID)...)
 }
 
-func (r *domainCatchAllResource) refreshState(ctx context.Context, current domainCatchAllResourceModel) (domainCatchAllResourceModel, error) {
+func (r *domainCatchAllResource) refreshState(ctx context.Context, current domainCatchAllResourceModel, fallbackToCurrent bool) (domainCatchAllResourceModel, error) {
 	domain, err := r.client.GetDomain(ctx, current.DomainName.ValueString())
 	if err != nil {
 		return domainCatchAllResourceModel{}, err
 	}
 
-	address := domain.CatchAllAddress
-	if address == "" {
-		address = current.CatchAllAddress.ValueString()
-	}
+	address := resolvedCatchAllAddress(domain.CatchAllAddress, current.CatchAllAddress, fallbackToCurrent)
 
 	return domainCatchAllResourceModel{
 		CatchAllAddress: types.StringValue(address),
 		DomainName:      current.DomainName,
 		ID:              types.StringValue(current.DomainName.ValueString()),
 	}, nil
+}
+
+func resolvedCatchAllAddress(remote string, current types.String, fallbackToCurrent bool) string {
+	if remote != "" {
+		return remote
+	}
+
+	if fallbackToCurrent {
+		return current.ValueString()
+	}
+
+	return ""
 }
