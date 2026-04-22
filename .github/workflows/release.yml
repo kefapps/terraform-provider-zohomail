@@ -54,19 +54,35 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache: true
+      - name: Install 1Password CLI
+        run: |
+          curl -sSLo /tmp/1password-cli.deb \
+            https://downloads.1password.com/linux/debian/amd64/stable/1password-cli-latest.deb
+          sudo dpkg -i /tmp/1password-cli.deb
+          op --version
       - name: Load release signing secrets from 1Password
         id: load_release_secrets
-        uses: 1password/load-secrets-action@92467eb28f72e8255933372f1e0707c567ce2259 # v4.0.0
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          GPG_PRIVATE_KEY: ${{ vars.OP_GPG_PRIVATE_KEY_REF }}
-          GPG_PASSPHRASE: ${{ vars.OP_GPG_PASSPHRASE_REF }}
+          OP_GPG_PRIVATE_KEY_REF: ${{ vars.OP_GPG_PRIVATE_KEY_REF }}
+          OP_GPG_PASSPHRASE_REF: ${{ vars.OP_GPG_PASSPHRASE_REF }}
+        run: |
+          unset OP_CONNECT_HOST OP_CONNECT_TOKEN
+          test -n "$OP_SERVICE_ACCOUNT_TOKEN"
+          test -n "$OP_GPG_PRIVATE_KEY_REF"
+          test -n "$OP_GPG_PASSPHRASE_REF"
+          {
+            echo "gpg_private_key<<__OP_EOF__"
+            op read "$OP_GPG_PRIVATE_KEY_REF"
+            echo "__OP_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          printf 'gpg_passphrase=%s\n' "$(op read "$OP_GPG_PASSPHRASE_REF")" >> "$GITHUB_OUTPUT"
       - name: Import GPG key
         uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
         id: import_gpg
         with:
-          gpg_private_key: ${{ steps.load_release_secrets.outputs.GPG_PRIVATE_KEY }}
-          passphrase: ${{ steps.load_release_secrets.outputs.GPG_PASSPHRASE }}
+          gpg_private_key: ${{ steps.load_release_secrets.outputs.gpg_private_key }}
+          passphrase: ${{ steps.load_release_secrets.outputs.gpg_passphrase }}
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7.0.0
         with:
