@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -177,7 +178,11 @@ func (r *domainOnboardingResource) ImportState(ctx context.Context, req resource
 }
 
 func (r *domainOnboardingResource) applyOnboarding(ctx context.Context, plan domainOnboardingResourceModel, diags *diag.Diagnostics) domainOnboardingResourceModel {
-	method := strings.ToLower(plan.VerificationMethod.ValueString())
+	method, err := validatedVerificationMethod(plan.VerificationMethod.ValueString())
+	if err != nil {
+		diags.AddError("Invalid Zoho Mail verification method", err.Error())
+		return domainOnboardingResourceModel{}
+	}
 
 	domain, err := r.client.GetDomain(ctx, plan.DomainName.ValueString())
 	if err != nil {
@@ -248,6 +253,17 @@ func domainOnboardingStateFromRemote(current domainOnboardingResourceModel, remo
 
 func valueBool(value types.Bool) bool {
 	return !value.IsNull() && !value.IsUnknown() && value.ValueBool()
+}
+
+func validatedVerificationMethod(method string) (string, error) {
+	method = strings.ToLower(strings.TrimSpace(method))
+
+	switch method {
+	case "txt", "cname", "html":
+		return method, nil
+	default:
+		return "", fmt.Errorf("unsupported verification_method %q; expected txt, cname, or html", method)
+	}
 }
 
 func domainVerificationComplete(domain *zohomail.Domain) bool {

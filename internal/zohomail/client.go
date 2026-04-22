@@ -149,7 +149,7 @@ type apiStatus struct {
 }
 
 type mailboxResponse struct {
-	AccountID       any             `json:"accountId"`
+	AccountID       exactString     `json:"accountId"`
 	Country         string          `json:"country"`
 	DisplayName     string          `json:"displayName"`
 	EmailAddress    []emailAddress  `json:"emailAddress"`
@@ -162,7 +162,35 @@ type mailboxResponse struct {
 	Role            string          `json:"roleName"`
 	SendMailDetails json.RawMessage `json:"sendMailDetails"`
 	TimeZone        string          `json:"timeZone"`
-	ZUID            any             `json:"zuid"`
+	ZUID            exactString     `json:"zuid"`
+}
+
+type exactString string
+
+func (s *exactString) UnmarshalJSON(data []byte) error {
+	raw := bytes.TrimSpace(data)
+	if bytes.Equal(raw, []byte("null")) {
+		*s = ""
+		return nil
+	}
+
+	if len(raw) > 0 && raw[0] == '"' {
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			return err
+		}
+
+		*s = exactString(text)
+		return nil
+	}
+
+	var number json.Number
+	if err := json.Unmarshal(raw, &number); err != nil {
+		return fmt.Errorf("decode exact string: %w", err)
+	}
+
+	*s = exactString(number.String())
+	return nil
 }
 
 type emailAddress struct {
@@ -928,7 +956,7 @@ func apiPath(parts ...string) string {
 
 func convertMailbox(raw mailboxResponse) *Mailbox {
 	result := &Mailbox{
-		AccountID:      stringValue(raw.AccountID),
+		AccountID:      strings.TrimSpace(string(raw.AccountID)),
 		Country:        strings.TrimSpace(raw.Country),
 		DisplayName:    strings.TrimSpace(raw.DisplayName),
 		FirstName:      strings.TrimSpace(raw.FirstName),
@@ -938,7 +966,7 @@ func convertMailbox(raw mailboxResponse) *Mailbox {
 		MailboxStatus:  strings.TrimSpace(raw.MailBoxStatus),
 		Role:           strings.TrimSpace(raw.Role),
 		TimeZone:       strings.TrimSpace(raw.TimeZone),
-		ZUID:           stringValue(raw.ZUID),
+		ZUID:           strings.TrimSpace(string(raw.ZUID)),
 	}
 
 	result.EmailAddresses, result.MailboxAddress = convertEmailAddresses(raw.EmailAddress, result.MailboxAddress)
