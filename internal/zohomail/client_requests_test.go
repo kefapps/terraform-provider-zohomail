@@ -40,21 +40,21 @@ func TestClientMailboxAccountRequests(t *testing.T) {
 			name:             "CreateMailbox",
 			method:           http.MethodPost,
 			path:             testOrgAccountsPath,
-			wantBodyContains: `"mailboxAddress":"support@example.com"`,
-			responseBody:     `{"status":{"code":200},"data":{"zuid":"1001","accountId":"2002","mailboxAddress":"support@example.com","roleName":"member","emailAddress":[{"mailId":"support@example.com","isPrimary":true}]}}`,
+			wantBodyContains: `"primaryEmailAddress":"support@example.com"`,
+			responseBody:     `{"status":{"code":200},"data":{"zuid":1001,"accountId":2002,"mailboxAddress":"support@example.com","roleName":"member","emailAddress":[{"mailId":"support@example.com","isPrimary":true}]}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
 
 				got, err := client.CreateMailbox(context.Background(), CreateMailboxInput{
-					Country:             "FR",
+					Country:             "in",
 					DisplayName:         "Support",
 					FirstName:           "Support",
 					InitialPassword:     "secret",
-					Language:            "fr",
+					Language:            "En",
 					LastName:            "Team",
 					PrimaryEmailAddress: testSupportEmail,
 					Role:                "member",
-					TimeZone:            "Europe/Paris",
+					TimeZone:            "Asia/Kolkata",
 				})
 				if err != nil {
 					t.Fatalf("CreateMailbox returned error: %v", err)
@@ -68,7 +68,7 @@ func TestClientMailboxAccountRequests(t *testing.T) {
 			name:         "GetMailbox",
 			method:       http.MethodGet,
 			path:         testMailboxPath,
-			responseBody: `{"status":{"code":200},"data":{"zuid":"1001","accountId":"2002","mailboxAddress":"support@example.com","roleName":"member","emailAddress":[{"mailId":"support@example.com","isPrimary":true}]}}`,
+			responseBody: `{"status":{"code":200},"data":{"zuid":1001,"accountId":2002,"mailboxAddress":"support@example.com","roleName":"member","emailAddress":[{"mailId":"support@example.com","isPrimary":true}]}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
 
@@ -336,10 +336,24 @@ func TestClientDomainMutationRequests(t *testing.T) {
 			},
 		},
 		{
+			name:             "DisableMailHosting",
+			method:           http.MethodPut,
+			path:             testDomainPath,
+			wantBodyContains: `"mode":"disableMailHosting"`,
+			responseBody:     `{"status":{"code":200},"data":null}`,
+			run: func(t *testing.T, client *Client) {
+				t.Helper()
+
+				if err := client.DisableMailHosting(context.Background(), testDomainExample); err != nil {
+					t.Fatalf("DisableMailHosting returned error: %v", err)
+				}
+			},
+		},
+		{
 			name:             "VerifySPF",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"mode":"verifySpfRecord"`,
+			wantBodyContains: `"mode":"VerifySpfRecord"`,
 			responseBody:     `{"status":{"code":200},"data":{"spfstatus":true}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
@@ -437,7 +451,7 @@ func TestClientDomainAliasAndDKIMRequests(t *testing.T) {
 			name:             "AddDomainAlias",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"aliasDomainName":"alias.example.com"`,
+			wantBodyContains: `"domainAlias":"alias.example.com"`,
 			responseBody:     `{"status":{"code":200},"data":null}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
@@ -450,7 +464,7 @@ func TestClientDomainAliasAndDKIMRequests(t *testing.T) {
 			name:             "DeleteDomainAlias",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"mode":"deleteAliasDomain"`,
+			wantBodyContains: `"mode":"removeDomainAsAlias"`,
 			responseBody:     `{"status":{"code":200},"data":null}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
@@ -463,7 +477,7 @@ func TestClientDomainAliasAndDKIMRequests(t *testing.T) {
 			name:             "CreateDKIM",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"mode":"addDkimDetail"`,
+			wantBodyContains: `"selector":"terraform"`,
 			responseBody:     `{"status":{"code":200},"data":{"dkimId":"dk-1","selector":"terraform","publicKey":"pub","dkimStatus":"verified"}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
@@ -573,11 +587,30 @@ func TestClientVerificationFailures(t *testing.T) {
 	}
 }
 
+func TestClientVerifyDomainAlreadyVerifiedIsSuccess(t *testing.T) {
+	t.Parallel()
+
+	client := testClient(t, http.MethodPut, testDomainPath, ``, `{"status":{"code":400,"description":"Invalid Input"},"data":{"moreInfo":"Domain already verified","error":"DOMAIN_ALREADY_VERIFIED"}}`)
+	if err := client.VerifyDomain(context.Background(), testDomainExample, "txt"); err != nil {
+		t.Fatalf("VerifyDomain should treat already verified as success, got %v", err)
+	}
+}
+
+func TestClientEnableMailHostingAlreadyEnabledIsSuccess(t *testing.T) {
+	t.Parallel()
+
+	client := testClient(t, http.MethodPut, testDomainPath, `"mode":"enableMailHosting"`, `{"status":{"code":400,"description":"Invalid Input"},"data":{"moreInfo":"MailHosting is already enabled for the domain","error":"MAILHOSTING_ALREADY_ENABLED"}}`)
+	if err := client.EnableMailHosting(context.Background(), testDomainExample); err != nil {
+		t.Fatalf("EnableMailHosting should treat already enabled as success, got %v", err)
+	}
+}
+
 func TestClientDoJSONErrorHandling(t *testing.T) {
 	t.Parallel()
 
 	runDoJSONErrorCase(t, http.StatusNotFound, ``, true)
 	runDoJSONErrorCase(t, http.StatusBadRequest, `{"status":{"code":404,"description":"missing","message":"not found"},"data":null}`, true)
+	runDoJSONErrorCase(t, http.StatusBadRequest, `{"status":{"code":400,"description":"Invalid Input"},"data":{"moreInfo":"Verification failed due to host not found","error":"TXT_RECORD_HOST_UNKNOWN"}}`, false)
 }
 
 func TestClientHelpersAndConversions(t *testing.T) {
@@ -681,6 +714,9 @@ func runDoJSONErrorCase(t *testing.T, status int, responseBody string, wantNotFo
 	}
 	if got := IsNotFound(err); got != wantNotFound {
 		t.Fatalf("unexpected not found classification: got %v want %v", got, wantNotFound)
+	}
+	if strings.Contains(responseBody, "TXT_RECORD_HOST_UNKNOWN") && !strings.Contains(err.Error(), "TXT_RECORD_HOST_UNKNOWN") {
+		t.Fatalf("expected doJSON error to include API error details, got %q", err)
 	}
 }
 

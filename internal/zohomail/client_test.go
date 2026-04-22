@@ -84,4 +84,16 @@ func TestConvertDomainNilVerificationCodes(t *testing.T) {
 	if domain.HTMLVerificationCode != "" {
 		t.Fatalf("expected empty HTML verification code, got %q", domain.HTMLVerificationCode)
 	}
+	if domain.TXTVerificationValue != "" {
+		t.Fatalf("expected empty TXT verification value, got %q", domain.TXTVerificationValue)
+	}
+}
+
+func TestConvertDomainTXTVerificationValue(t *testing.T) {
+	t.Parallel()
+
+	domain := convertDomain(rawDomain{CNAMEVerificationCode: "zb12345678"})
+	if domain.TXTVerificationValue != "zoho-verification=zb12345678.zmverify.zoho.com" {
+		t.Fatalf("unexpected TXT verification value, got %q", domain.TXTVerificationValue)
+	}
 }
