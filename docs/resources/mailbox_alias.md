@@ -15,7 +15,7 @@ Manage a Zoho Mail email alias attached to a mailbox.
 ```terraform
 resource "zohomail_mailbox" "support" {
   primary_email_address = "support@example.com"
-  initial_password      = "replace-me"
+  initial_password      = var.mailbox_initial_password
   first_name            = "Support"
   last_name             = "Team"
   display_name          = "Support"

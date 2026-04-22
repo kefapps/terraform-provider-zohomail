@@ -171,24 +171,6 @@ provider "zohomail" {
 
 For an unpublished provider, use `terraform plan` or `terraform apply` directly once the `dev_overrides` entry is in place. Do not rely on `terraform init` to install `kefapps/zohomail` from the public Registry before the provider is published there, because Terraform will still try to resolve the source address remotely.
 
-## Local Sonar Quality Gate
-
-This repository exposes an optional local SonarQube quality gate for stricter manual certification:
-
-- `make sonar-local`: local Sonar scan for work-in-progress debugging
-- `make quality`: strict local certification on a clean worktree, intended before push
-- `make quality-status`: inspect the local SonarQube stack state
-- `make quality-reset`: stop and clean the local SonarQube stack state
-
-These commands are available for local diagnosis and stricter manual certification. They are not the default repo gate and they are not mirrored in GitHub CI at this stage.
-
-`make quality`:
-
-- refuses a dirty worktree
-- generates Go coverage
-- boots a local SonarQube stack through Docker Compose
-- waits for the local quality gate result
-
 ## Documentation
 
 Provider documentation is generated with `tfplugindocs`:
