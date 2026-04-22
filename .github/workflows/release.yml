@@ -54,12 +54,19 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache: true
-      - name: Install 1Password CLI
+      - name: Install pinned 1Password CLI
         run: |
-          curl -fsSLo /tmp/1password-cli.deb \
-            https://downloads.1password.com/linux/debian/amd64/stable/1password-cli-amd64-latest.deb
-          sudo dpkg -i /tmp/1password-cli.deb
-          op --version
+          OP_VERSION=2.34.0
+          OP_SHA256=198b05dcf9a0972778ce5a4e262c459979b0c837257b5da65e2fba6187734226
+          curl -fsSLo /tmp/op.zip \
+            "https://cache.agilebits.com/dist/1P/op2/pkg/v${OP_VERSION}/op_linux_amd64_v${OP_VERSION}.zip"
+          echo "${OP_SHA256}  /tmp/op.zip" | sha256sum --check --strict
+          unzip -p /tmp/op.zip op > /tmp/op
+          chmod +x /tmp/op
+          mkdir -p "$HOME/.local/bin"
+          mv /tmp/op "$HOME/.local/bin/op"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/op" --version | grep -Fx "$OP_VERSION"
       - name: Load release signing secrets from 1Password
         id: load_release_secrets
         env:
