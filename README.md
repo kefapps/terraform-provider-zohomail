@@ -208,15 +208,16 @@ Operational runbooks:
 
 ## Release Policy
 
-Release automation is intentionally not in place yet:
+Release automation now lives in:
 
-- no `.github/workflows` CI or release pipeline
-- no `.goreleaser.yml`
-- no automated Terraform Registry publication
+- `.github/workflows/release.yml`
+- `.goreleaser.yml`
 
 Current release posture:
 
 - keep `CHANGELOG.md` updated under `Unreleased`
 - keep docs/examples/generated markdown current on each provider change
-- treat future provider tags as `v*` semver tags cut from `main`
-- reserve the first public provider release for `v0.1.0` once the v1 acceptance matrix is implemented and documented
+- validate release config locally with `make release-check` and `make release-snapshot`
+- treat provider tags as `v*` semver tags cut from `main`
+- keep public publication gated on configured GitHub GPG secrets plus Terraform Registry onboarding for `kefapps/zohomail`
+- target `v0.1.0` as the first public release
