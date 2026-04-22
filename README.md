@@ -218,6 +218,8 @@ Current release posture:
 - keep `CHANGELOG.md` updated under `Unreleased`
 - keep docs/examples/generated markdown current on each provider change
 - validate release config locally with `make release-check` and `make release-snapshot`
+- load release signing material from `1Password`, bootstrapped in GitHub Actions through `OP_SERVICE_ACCOUNT_TOKEN`
+- keep non-secret `op://` references in GitHub Actions variables `OP_GPG_PRIVATE_KEY_REF` and `OP_GPG_PASSPHRASE_REF`
 - treat provider tags as `v*` semver tags cut from `main`
-- keep public publication gated on configured GitHub GPG secrets plus Terraform Registry onboarding for `kefapps/zohomail`
+- keep public publication gated on `1Password` release-signing access plus Terraform Registry onboarding for `kefapps/zohomail`
 - target `v0.1.0` as the first public release
