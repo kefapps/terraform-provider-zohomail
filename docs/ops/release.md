@@ -18,7 +18,7 @@ Before cutting a real public tag, make sure all of the following are in place:
 - a dedicated 1Password service account exists for this provider release flow, with read access limited to the release-signing item
 - GitHub Actions secret `OP_SERVICE_ACCOUNT_TOKEN` is configured for the repo; an org-level secret scoped only to `terraform-provider-zohomail` is the preferred setup
 - GitHub Actions variables `OP_GPG_PRIVATE_KEY_REF` and `OP_GPG_PASSPHRASE_REF` are configured with the non-secret `op://...` references that point to the dedicated 1Password release-signing item
-- the release workflow resolves those `op://...` references through the 1Password CLI, not `1password/load-secrets-action`, because the repo's Actions policy only allows a small pinned allowlist
+- the release workflow resolves those `op://...` references through a pinned and checksum-verified 1Password CLI binary, not `1password/load-secrets-action`, because the repo's Actions policy only allows a small pinned allowlist
 - the matching GPG public key is uploaded to Terraform Registry
 - the provider `kefapps/zohomail` has been onboarded in Terraform Registry
 
