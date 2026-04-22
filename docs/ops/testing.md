@@ -157,17 +157,6 @@ curl -X POST "https://accounts.zoho.eu/oauth/v2/token" \
 - Any schema, example, or template change must be followed by `make generate`.
 - Validate generated docs with `tfplugindocs validate`.
 
-## Local Sonar
-
-Sonar remains available for manual use:
-
-- `make sonar-local`
-- `make quality`
-- `make quality-status`
-- `make quality-reset`
-
-It is advisory in this repo at this stage, not the default gate for pushes or PRs.
-
 ## Expected Evidence
 
 When reporting validation, capture:

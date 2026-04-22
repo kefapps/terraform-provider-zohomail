@@ -1,4 +1,4 @@
-.PHONY: fmt test testacc generate install build coverage sonar-local quality quality-status quality-reset zoho-token release-check release-snapshot
+.PHONY: fmt test testacc generate install build coverage zoho-token release-check release-snapshot
 
 GORELEASER ?= goreleaser
 
@@ -32,15 +32,3 @@ release-snapshot:
 
 zoho-token:
 	./scripts/zoho-oauth-token.sh --env-file ./.env.testacc
-
-sonar-local: coverage
-	./scripts/sast-sonarqube.sh
-
-quality:
-	./scripts/quality-pr-gate.sh
-
-quality-status:
-	node ./scripts/quality-sonarqube-local.mjs status
-
-quality-reset:
-	node ./scripts/quality-sonarqube-local.mjs reset
