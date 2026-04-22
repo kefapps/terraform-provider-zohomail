@@ -60,6 +60,11 @@ type APIError struct {
 	ZohoCode    int
 }
 
+type VerificationPendingError struct {
+	Timeout time.Duration
+	Err     error
+}
+
 func (e *APIError) Error() string {
 	switch {
 	case e.Message != "" && e.Description != "" && e.Details != "":
@@ -81,6 +86,14 @@ func (e *APIError) Error() string {
 	}
 }
 
+func (e *VerificationPendingError) Error() string {
+	return fmt.Sprintf("zoho mail verification still pending after %s: %v", e.Timeout, e.Err)
+}
+
+func (e *VerificationPendingError) Unwrap() error {
+	return e.Err
+}
+
 func IsNotFound(err error) bool {
 	var apiErr *APIError
 	if errors.As(err, &apiErr) {
@@ -92,6 +105,19 @@ func IsNotFound(err error) bool {
 
 func IsDisableMailHostingRequired(err error) bool {
 	return isDisableMailHostingRequiredError(err)
+}
+
+func IsVerificationPending(err error) bool {
+	var pendingErr *VerificationPendingError
+	return errors.As(err, &pendingErr)
+}
+
+func IsMailboxLicenseLimitReached(err error) bool {
+	return apiErrorContains(err, "MAXIMUM USER LICENSE LIMIT REACHED")
+}
+
+func IsOperationNotPermitted(err error) bool {
+	return apiErrorContains(err, "OPERATION_NOT_PERMITTED")
 }
 
 func BaseURLForDataCenter(dataCenter string) (string, error) {
@@ -263,6 +289,7 @@ type rawDKIM struct {
 	DKIMStatus any    `json:"dkimStatus"`
 	DKIMValue  string `json:"dkimValue"`
 	IsDefault  bool   `json:"isDefault"`
+	IsVerified any    `json:"isVerified"`
 	PublicKey  string `json:"publicKey"`
 	Selector   string `json:"selector"`
 }
@@ -304,6 +331,7 @@ type Domain struct {
 	MXStatus              string
 	SPFStatus             string
 	SubDomainStripping    bool
+	SubDomainStrippingSet bool
 	TXTVerificationValue  string
 	VerificationStatus    string
 }
@@ -577,7 +605,7 @@ func (c *Client) DisableMailHosting(ctx context.Context, domainName string) erro
 func (c *Client) VerifySPF(ctx context.Context, domainName string) error {
 	return c.retryVerification(ctx, func(ctx context.Context) error {
 		var response spfVerificationResponse
-		if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "verifySpfRecord"}, &response); err != nil {
+		if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "VerifySpfRecord"}, &response); err != nil {
 			return err
 		}
 
@@ -705,7 +733,16 @@ func verificationFailure(kind string, message string, errorCode string) error {
 
 func isRetryableVerificationError(err error) bool {
 	var verificationErr *verificationError
-	return errors.As(err, &verificationErr)
+	if errors.As(err, &verificationErr) {
+		return true
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	var timeoutErr interface{ Timeout() bool }
+	return errors.As(err, &timeoutErr) && timeoutErr.Timeout()
 }
 
 func (c *Client) retryVerification(ctx context.Context, fn func(context.Context) error) error {
@@ -736,7 +773,10 @@ func (c *Client) retryVerification(ctx context.Context, fn func(context.Context)
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			return fmt.Errorf("zoho mail verification still pending after %s: %w", retryTimeout, lastErr)
+			return &VerificationPendingError{
+				Timeout: retryTimeout,
+				Err:     lastErr,
+			}
 		case <-time.After(retryDelay):
 		}
 	}
@@ -900,7 +940,7 @@ func isAlreadyVerifiedError(err error) bool {
 		return false
 	}
 
-	text := strings.ToUpper(strings.Join([]string{apiErr.Description, apiErr.Message, apiErr.Details}, " "))
+	text := apiErrorText(apiErr)
 	return strings.Contains(text, "ALREADY_VERIFIED")
 }
 
@@ -910,7 +950,7 @@ func isAlreadyEnabledError(err error) bool {
 		return false
 	}
 
-	text := strings.ToUpper(strings.Join([]string{apiErr.Description, apiErr.Message, apiErr.Details}, " "))
+	text := apiErrorText(apiErr)
 	return strings.Contains(text, "ALREADY ENABLED") || strings.Contains(text, "ALREADY_ENABLED")
 }
 
@@ -920,7 +960,7 @@ func isAlreadyDisabledError(err error) bool {
 		return false
 	}
 
-	text := strings.ToUpper(strings.Join([]string{apiErr.Description, apiErr.Message, apiErr.Details}, " "))
+	text := apiErrorText(apiErr)
 	return strings.Contains(text, "NOT ENABLED") || strings.Contains(text, "ALREADY DISABLED") || strings.Contains(text, "ALREADY_DISABLED")
 }
 
@@ -930,8 +970,21 @@ func isDisableMailHostingRequiredError(err error) bool {
 		return false
 	}
 
-	text := strings.ToUpper(strings.Join([]string{apiErr.Description, apiErr.Message, apiErr.Details}, " "))
+	text := apiErrorText(apiErr)
 	return strings.Contains(text, "RMV_HOSTING_BEFORE_DLT_DOMAIN")
+}
+
+func apiErrorContains(err error, want string) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+
+	return strings.Contains(apiErrorText(apiErr), want)
+}
+
+func apiErrorText(apiErr *APIError) string {
+	return strings.ToUpper(strings.Join([]string{apiErr.Description, apiErr.Message, apiErr.Details}, " "))
 }
 
 func (c *Client) orgPath(parts ...string) string {
@@ -1035,6 +1088,7 @@ func convertDomain(raw rawDomain) Domain {
 		MXStatus:              statusString(raw.MXStatus),
 		SPFStatus:             statusString(raw.SPFStatus),
 		SubDomainStripping:    boolValue(raw.SubDomainStripping),
+		SubDomainStrippingSet: raw.SubDomainStripping != nil,
 		TXTVerificationValue:  domainTXTVerificationValue(cnameCode),
 		VerificationStatus:    statusString(raw.VerificationStatus),
 	}
@@ -1056,12 +1110,17 @@ func domainTXTVerificationValue(cnameCode string) string {
 }
 
 func convertDKIM(raw rawDKIM) DKIMDetail {
+	status := raw.DKIMStatus
+	if status == nil {
+		status = raw.IsVerified
+	}
+
 	return DKIMDetail{
 		DKIMID:    strings.TrimSpace(raw.DKIMID),
 		IsDefault: raw.IsDefault,
 		PublicKey: strings.TrimSpace(raw.PublicKey),
 		Selector:  strings.TrimSpace(raw.Selector),
-		Status:    statusString(raw.DKIMStatus),
+		Status:    statusString(status),
 	}
 }
 

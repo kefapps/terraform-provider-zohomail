@@ -45,6 +45,12 @@ func TestAccMailbox_basicImportUpdateReplace(t *testing.T) {
 				PreConfig: func() {
 					testAccWaitForDomainVerificationTXT(t, domainName)
 				},
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
+			},
+			{
+				PreConfig: func() {
+					testAccRequireMailboxCapacity(t, "Mailbox", domainName, 1)
+				},
 				Config: testAccMailboxConfig(domainName, primaryEmail, "Support", "member", false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("id"), knownvalue.NotNull()),
@@ -121,6 +127,12 @@ func TestAccMailboxAlias_basicImportDrift(t *testing.T) {
 				PreConfig: func() {
 					testAccWaitForDomainVerificationTXT(t, domainName)
 				},
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
+			},
+			{
+				PreConfig: func() {
+					testAccRequireMailboxCapacity(t, "Mailbox alias", domainName, 1)
+				},
 				Config: testAccMailboxAliasConfig(domainName, mailboxEmail, aliasEmail),
 				ConfigStateChecks: []statecheck.StateCheck{
 					testAccCaptureStringValue(mailboxResourceName, tfjsonpath.New("id"), &mailboxID),
@@ -181,6 +193,12 @@ func TestAccMailboxForwarding_basicImportUpdate(t *testing.T) {
 				PreConfig: func() {
 					testAccWaitForDomainVerificationTXT(t, domainName)
 				},
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
+			},
+			{
+				PreConfig: func() {
+					testAccRequireMailboxCapacity(t, "Mailbox forwarding", domainName, 3)
+				},
 				Config: testAccMailboxForwardingConfig(domainName, sourceEmail, salesEmail, helloEmail, []string{salesEmail, helloEmail}, false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("id"), knownvalue.NotNull()),
@@ -230,6 +248,12 @@ func TestAccMailboxForwarding_rejectExternalDomains(t *testing.T) {
 			{
 				PreConfig: func() {
 					testAccWaitForDomainVerificationTXT(t, domainName)
+				},
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
+			},
+			{
+				PreConfig: func() {
+					testAccRequireMailboxCapacity(t, "Mailbox forwarding", domainName, 1)
 				},
 				Config:      testAccMailboxForwardingConfig(domainName, sourceEmail, "", "", []string{"outside@example.net"}, false),
 				ExpectError: regexp.MustCompile(`Unsupported forwarding target`),

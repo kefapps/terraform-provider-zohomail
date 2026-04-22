@@ -206,15 +206,19 @@ func (r *domainOnboardingResource) applyOnboarding(ctx context.Context, plan dom
 
 	if valueBool(plan.VerifySPF) {
 		if err := r.client.VerifySPF(ctx, plan.DomainName.ValueString()); err != nil {
-			diags.AddError("Unable to verify Zoho Mail SPF record", err.Error())
-			return domainOnboardingResourceModel{}
+			if !zohomail.IsVerificationPending(err) {
+				diags.AddError("Unable to verify Zoho Mail SPF record", err.Error())
+				return domainOnboardingResourceModel{}
+			}
 		}
 	}
 
 	if valueBool(plan.VerifyMX) {
 		if err := r.client.VerifyMX(ctx, plan.DomainName.ValueString()); err != nil {
-			diags.AddError("Unable to verify Zoho Mail MX records", err.Error())
-			return domainOnboardingResourceModel{}
+			if !zohomail.IsVerificationPending(err) {
+				diags.AddError("Unable to verify Zoho Mail MX records", err.Error())
+				return domainOnboardingResourceModel{}
+			}
 		}
 	}
 

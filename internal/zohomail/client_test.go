@@ -4,8 +4,11 @@
 package zohomail
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"testing"
+	"time"
 )
 
 func TestBaseURLForDataCenter(t *testing.T) {
@@ -98,6 +101,75 @@ func TestConvertDomainTXTVerificationValue(t *testing.T) {
 	domain := convertDomain(rawDomain{CNAMEVerificationCode: "zb12345678"})
 	if domain.TXTVerificationValue != "zoho-verification=zb12345678.zmverify.zoho.com" {
 		t.Fatalf("unexpected TXT verification value, got %q", domain.TXTVerificationValue)
+	}
+}
+
+func TestConvertDomainSubDomainStrippingTracksPresence(t *testing.T) {
+	t.Parallel()
+
+	unknown := convertDomain(rawDomain{})
+	if unknown.SubDomainStrippingSet {
+		t.Fatal("expected subdomain stripping to remain unset when Zoho omits the field")
+	}
+
+	enabled := convertDomain(rawDomain{SubDomainStripping: true})
+	if !enabled.SubDomainStrippingSet || !enabled.SubDomainStripping {
+		t.Fatalf("expected subdomain stripping to be set and true, got %#v", enabled)
+	}
+}
+
+func TestConvertDKIMFallsBackToIsVerified(t *testing.T) {
+	t.Parallel()
+
+	dkim := convertDKIM(rawDKIM{
+		DKIMID:     "dk-1",
+		IsVerified: true,
+		PublicKey:  "pub",
+		Selector:   "selector",
+	})
+	if dkim.Status != "true" {
+		t.Fatalf("expected DKIM status to use isVerified when dkimStatus is absent, got %q", dkim.Status)
+	}
+}
+
+func TestVerificationPendingErrorHelpers(t *testing.T) {
+	t.Parallel()
+
+	err := &VerificationPendingError{
+		Timeout: time.Minute,
+		Err:     errors.New("verification pending"),
+	}
+
+	if !IsVerificationPending(err) {
+		t.Fatal("expected IsVerificationPending to match VerificationPendingError")
+	}
+
+	if !isRetryableVerificationError(context.DeadlineExceeded) {
+		t.Fatal("expected context deadline exceeded to be retryable for verification requests")
+	}
+}
+
+func TestAPIErrorClassifiers(t *testing.T) {
+	t.Parallel()
+
+	licenseErr := &APIError{
+		Description: "Internal Server Error",
+		Details:     "Maximum user license limit reached",
+		StatusCode:  500,
+		ZohoCode:    500,
+	}
+	if !IsMailboxLicenseLimitReached(licenseErr) {
+		t.Fatal("expected mailbox license limit classifier to match")
+	}
+
+	operationErr := &APIError{
+		Description: "Forbidden",
+		Details:     "OPERATION_NOT_PERMITTED",
+		StatusCode:  403,
+		ZohoCode:    403,
+	}
+	if !IsOperationNotPermitted(operationErr) {
+		t.Fatal("expected operation not permitted classifier to match")
 	}
 }
 
