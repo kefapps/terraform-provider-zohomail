@@ -19,7 +19,7 @@ make generate
 go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate
 ```
 
-This is the default local validation gate for normal provider work. There is no GitHub Actions CI gate yet.
+This is the default local validation gate for normal provider work. Pull requests are also expected to pass the GitHub Actions checks `Build`, `Unit Tests`, `Generate Check`, and `Docs Validate`.
 
 ## Acceptance Tests
 
