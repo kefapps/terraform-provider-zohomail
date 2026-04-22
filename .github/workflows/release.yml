@@ -30,8 +30,12 @@ jobs:
       - run: make generate
       - name: Check generated files are committed
         run: |
-          git diff --compact-summary --exit-code || \
-            (echo; echo "Unexpected diff after make generate. Run 'make generate' and commit the result."; exit 1)
+          if [ -n "$(git status --short --untracked-files=all)" ]; then
+            git status --short --untracked-files=all
+            echo
+            echo "Unexpected diff after make generate. Run 'make generate' and commit the result."
+            exit 1
+          fi
       - run: go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name zohomail
 
   goreleaser:
