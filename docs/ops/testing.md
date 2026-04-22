@@ -10,12 +10,12 @@ Run these commands for normal provider work:
 make test
 make build
 make generate
-go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate
+go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name zohomail
 ```
 
 Use `make fmt` before committing code changes.
 
-This is the default repo gate. There is no GitHub Actions CI gate yet.
+This is the default repo gate. GitHub Actions runs the same build, unit, generate, and docs validation workflow on `push` and `pull_request`, while live acceptance remains local-only.
 
 ## When Acceptance Is Required
 
@@ -155,7 +155,7 @@ curl -X POST "https://accounts.zoho.eu/oauth/v2/token" \
 
 - `examples/resources/*/resource.tf` are the canonical usage examples.
 - Any schema, example, or template change must be followed by `make generate`.
-- Validate generated docs with `tfplugindocs validate`.
+- Validate generated docs with `tfplugindocs validate --provider-name zohomail`.
 
 ## Expected Evidence
 

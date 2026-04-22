@@ -32,7 +32,7 @@ Do not assume a published provider exists until those four prerequisites are sat
 make test
 make build
 make generate
-go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate
+go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name zohomail
 ```
 
 - the relevant live acceptance scenarios have been run locally when lifecycle, import, drift, or API behavior changed
