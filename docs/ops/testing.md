@@ -38,17 +38,25 @@ Base provider acceptance:
 - `ZOHOMAIL_DATA_CENTER`
 - `ZOHOMAIL_ORGANIZATION_ID`
 
+Any scenario that creates disposable Zoho domains or mailboxes also needs:
+
+- `ZOHOMAIL_TEST_DNS_BASE_DOMAIN`
+
 Domain and DNS acceptance:
 
 - `ZOHOMAIL_TEST_DNS_PROVIDER=cloudflare`
 - `ZOHOMAIL_TEST_DNS_ZONE_NAME`
-- `ZOHOMAIL_TEST_DNS_BASE_DOMAIN`
 - `CLOUDFLARE_API_TOKEN`
 
-Optional DNS tuning:
+Optional DNS tuning and overrides:
 
 - `ZOHOMAIL_TEST_DNS_RESOLVER`
 - `ZOHOMAIL_TEST_DNS_TIMEOUT`
+- `ZOHOMAIL_TEST_DNS_VERIFICATION_TARGET`
+- `ZOHOMAIL_TEST_DNS_SPF_VALUE`
+- `ZOHOMAIL_TEST_DNS_MX_10`
+- `ZOHOMAIL_TEST_DNS_MX_20`
+- `ZOHOMAIL_TEST_DNS_MX_50`
 
 The acceptance tenant must be dedicated to tests and safe to mutate.
 

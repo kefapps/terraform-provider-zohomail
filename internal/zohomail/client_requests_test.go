@@ -307,7 +307,7 @@ func TestClientDomainRequests(t *testing.T) {
 			method:           http.MethodPut,
 			path:             testDomainPath,
 			wantBodyContains: `"mode":"verifyDomainByTXT"`,
-			responseBody:     `{"status":{"code":200},"data":null}`,
+			responseBody:     `{"status":{"code":200},"data":{"status":true}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
 				if err := client.VerifyDomain(context.Background(), testDomainExample, "txt"); err != nil {
@@ -340,7 +340,7 @@ func TestClientDomainMutationRequests(t *testing.T) {
 			method:           http.MethodPut,
 			path:             testDomainPath,
 			wantBodyContains: `"mode":"verifySpfRecord"`,
-			responseBody:     `{"status":{"code":200},"data":null}`,
+			responseBody:     `{"status":{"code":200},"data":{"spfstatus":true}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
 				if err := client.VerifySPF(context.Background(), testDomainExample); err != nil {
@@ -352,8 +352,8 @@ func TestClientDomainMutationRequests(t *testing.T) {
 			name:             "VerifyMX",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"mode":"verifyMXRecord"`,
-			responseBody:     `{"status":{"code":200},"data":null}`,
+			wantBodyContains: `"mode":"verifyMxRecord"`,
+			responseBody:     `{"status":{"code":200},"data":{"mxstatus":true}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
 				if err := client.VerifyMX(context.Background(), testDomainExample); err != nil {
@@ -463,7 +463,7 @@ func TestClientDomainAliasAndDKIMRequests(t *testing.T) {
 			name:             "CreateDKIM",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"mode":"generateDkimKey"`,
+			wantBodyContains: `"mode":"addDkimDetail"`,
 			responseBody:     `{"status":{"code":200},"data":{"dkimId":"dk-1","selector":"terraform","publicKey":"pub","dkimStatus":"verified"}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
@@ -484,7 +484,7 @@ func TestClientDomainAliasAndDKIMRequests(t *testing.T) {
 			name:             "SetDefaultDKIM",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"mode":"setAsDefaultDkimKey"`,
+			wantBodyContains: `"mode":"makeDkimDefault"`,
 			responseBody:     `{"status":{"code":200},"data":null}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
@@ -497,8 +497,8 @@ func TestClientDomainAliasAndDKIMRequests(t *testing.T) {
 			name:             "VerifyDKIM",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"mode":"verifyDkimRecord"`,
-			responseBody:     `{"status":{"code":200},"data":null}`,
+			wantBodyContains: `"mode":"verifyDkimKey"`,
+			responseBody:     `{"status":{"code":200},"data":{"dkimstatus":true}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
 				if err := client.VerifyDKIM(context.Background(), testDomainExample, "dk-1"); err != nil {
@@ -510,7 +510,7 @@ func TestClientDomainAliasAndDKIMRequests(t *testing.T) {
 			name:             "DeleteDKIM",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"mode":"deleteDkimRecord"`,
+			wantBodyContains: `"mode":"deleteDkimDetail"`,
 			responseBody:     `{"status":{"code":200},"data":null}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
@@ -520,6 +520,57 @@ func TestClientDomainAliasAndDKIMRequests(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestClientVerificationFailures(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name         string
+		responseBody string
+		run          func(*Client) error
+	}{
+		{
+			name:         "VerifyDomain",
+			responseBody: `{"status":{"code":200},"data":{"status":false,"message":"Verification failed due to host not found","error":"TXT_RECORD_HOST_UNKNOWN"}}`,
+			run: func(client *Client) error {
+				return client.VerifyDomain(context.Background(), testDomainExample, "txt")
+			},
+		},
+		{
+			name:         "VerifySPF",
+			responseBody: `{"status":{"code":200},"data":{"spfstatus":false}}`,
+			run: func(client *Client) error {
+				return client.VerifySPF(context.Background(), testDomainExample)
+			},
+		},
+		{
+			name:         "VerifyMX",
+			responseBody: `{"status":{"code":200},"data":{"mxstatus":false}}`,
+			run: func(client *Client) error {
+				return client.VerifyMX(context.Background(), testDomainExample)
+			},
+		},
+		{
+			name:         "VerifyDKIM",
+			responseBody: `{"status":{"code":200},"data":{"dkimstatus":false}}`,
+			run: func(client *Client) error {
+				return client.VerifyDKIM(context.Background(), testDomainExample, "dk-1")
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := testClient(t, http.MethodPut, testDomainPath, ``, tc.responseBody)
+			if err := tc.run(client); err == nil {
+				t.Fatalf("%s expected verification failure, got nil", tc.name)
+			}
+		})
+	}
 }
 
 func TestClientDoJSONErrorHandling(t *testing.T) {

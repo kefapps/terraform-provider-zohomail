@@ -7,3 +7,4 @@ All notable changes to this project will be documented in this file.
 - Add v1 Zoho Mail provider configuration and admin resources
 - Add local SonarQube quality-gate workflow inspired by `keftionnaire`
 - Document local testing and draft release policy for the provider
+- Add live acceptance coverage and verification hardening for mailbox and domain resources
