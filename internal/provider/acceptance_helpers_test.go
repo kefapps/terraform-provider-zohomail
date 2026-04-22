@@ -191,6 +191,87 @@ func testAccZohoClient(t *testing.T) *zohomail.Client {
 	return client
 }
 
+func testAccRequireMailboxCapacity(t *testing.T, scenario string, domainName string, mailboxCount int) {
+	t.Helper()
+
+	client := testAccZohoClient(t)
+	ctx := context.Background()
+	probes := make([]*zohomail.Mailbox, 0, mailboxCount)
+
+	defer func() {
+		for _, mailbox := range probes {
+			if err := client.DeleteMailbox(ctx, mailbox.ZUID); err != nil && !zohomail.IsNotFound(err) {
+				t.Fatalf("delete probe mailbox %s: %v", mailbox.MailboxAddress, err)
+			}
+		}
+	}()
+
+	for idx := 0; idx < mailboxCount; idx++ {
+		mailbox, err := client.CreateMailbox(ctx, zohomail.CreateMailboxInput{
+			Country:             testAccMailboxCountry,
+			DisplayName:         fmt.Sprintf("%s Probe %d", scenario, idx+1),
+			FirstName:           "Probe",
+			InitialPassword:     testAccMailboxInitialPassword,
+			Language:            testAccMailboxLanguage,
+			LastName:            "Mailbox",
+			OneTimePassword:     false,
+			PrimaryEmailAddress: testAccRandomEmail(fmt.Sprintf("probe%d", idx+1), domainName),
+			Role:                "member",
+			TimeZone:            testAccMailboxTimeZone,
+		})
+		if err != nil {
+			if zohomail.IsMailboxLicenseLimitReached(err) {
+				t.Skipf("%s acceptance tests skipped: tenant has no spare Zoho Mail mailbox licenses", scenario)
+			}
+			t.Fatalf("probe mailbox capacity for %s: %v", scenario, err)
+		}
+
+		probes = append(probes, mailbox)
+	}
+}
+
+func testAccRequireCatchAllCapability(t *testing.T, domainName string) {
+	t.Helper()
+
+	client := testAccZohoClient(t)
+	ctx := context.Background()
+
+	mailbox, err := client.CreateMailbox(ctx, zohomail.CreateMailboxInput{
+		Country:             testAccMailboxCountry,
+		DisplayName:         "Catch-all Probe",
+		FirstName:           "Catch",
+		InitialPassword:     testAccMailboxInitialPassword,
+		Language:            testAccMailboxLanguage,
+		LastName:            "All",
+		OneTimePassword:     false,
+		PrimaryEmailAddress: testAccRandomEmail("catchallprobe", domainName),
+		Role:                "member",
+		TimeZone:            testAccMailboxTimeZone,
+	})
+	if err != nil {
+		if zohomail.IsMailboxLicenseLimitReached(err) {
+			t.Skip("Catch-all acceptance tests skipped: tenant has no spare Zoho Mail mailbox licenses")
+		}
+		t.Fatalf("create catch-all probe mailbox: %v", err)
+	}
+
+	defer func() {
+		if err := client.DeleteCatchAll(ctx, domainName); err != nil && !zohomail.IsNotFound(err) {
+			t.Fatalf("delete catch-all probe address: %v", err)
+		}
+		if err := client.DeleteMailbox(ctx, mailbox.ZUID); err != nil && !zohomail.IsNotFound(err) {
+			t.Fatalf("delete catch-all probe mailbox %s: %v", mailbox.MailboxAddress, err)
+		}
+	}()
+
+	if err := client.SetCatchAll(ctx, domainName, mailbox.MailboxAddress); err != nil {
+		if zohomail.IsOperationNotPermitted(err) {
+			t.Skip("Catch-all acceptance tests skipped: tenant plan does not permit catch-all configuration")
+		}
+		t.Fatalf("probe catch-all capability: %v", err)
+	}
+}
+
 func testAccProvidersConfig(includeCloudflare bool) string {
 	if includeCloudflare {
 		return `

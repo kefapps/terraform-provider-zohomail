@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -137,7 +138,7 @@ func (r *domainDKIMResource) Create(ctx context.Context, req resource.CreateRequ
 		}
 	}
 
-	nextState, err := r.refreshState(ctx, plan.DomainName.ValueString(), dkim.DKIMID, plan)
+	nextState, err := r.refreshState(ctx, plan.DomainName.ValueString(), dkim.DKIMID, plan, valueBool(plan.VerifyPublicKey))
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to refresh Zoho Mail DKIM selector", err.Error())
 		return
@@ -154,7 +155,7 @@ func (r *domainDKIMResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	nextState, err := r.refreshState(ctx, state.DomainName.ValueString(), stateIDPart(state.ID.ValueString(), 1), state)
+	nextState, err := r.refreshState(ctx, state.DomainName.ValueString(), stateIDPart(state.ID.ValueString(), 1), state, false)
 	if zohomail.IsNotFound(err) {
 		resp.State.RemoveResource(ctx)
 		return
@@ -198,7 +199,7 @@ func (r *domainDKIMResource) Update(ctx context.Context, req resource.UpdateRequ
 		}
 	}
 
-	nextState, err := r.refreshState(ctx, plan.DomainName.ValueString(), dkimID, plan)
+	nextState, err := r.refreshState(ctx, plan.DomainName.ValueString(), dkimID, plan, valueBool(plan.VerifyPublicKey))
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to refresh Zoho Mail DKIM selector", err.Error())
 		return
@@ -235,10 +236,41 @@ func (r *domainDKIMResource) ImportState(ctx context.Context, req resource.Impor
 	}
 }
 
-func (r *domainDKIMResource) refreshState(ctx context.Context, domainName string, dkimID string, current domainDKIMResourceModel) (domainDKIMResourceModel, error) {
+func (r *domainDKIMResource) refreshState(ctx context.Context, domainName string, dkimID string, current domainDKIMResourceModel, waitForVerification bool) (domainDKIMResourceModel, error) {
+	if !waitForVerification {
+		state, _, err := r.refreshStateOnce(ctx, domainName, dkimID, current)
+		return state, err
+	}
+
+	const (
+		retryDelay   = 5 * time.Second
+		retryTimeout = 2 * time.Minute
+	)
+
+	retryCtx, cancel := context.WithTimeout(ctx, retryTimeout)
+	defer cancel()
+
+	for {
+		state, verified, err := r.refreshStateOnce(retryCtx, domainName, dkimID, current)
+		if err != nil {
+			return domainDKIMResourceModel{}, err
+		}
+		if verified {
+			return state, nil
+		}
+
+		select {
+		case <-retryCtx.Done():
+			return state, nil
+		case <-time.After(retryDelay):
+		}
+	}
+}
+
+func (r *domainDKIMResource) refreshStateOnce(ctx context.Context, domainName string, dkimID string, current domainDKIMResourceModel) (domainDKIMResourceModel, bool, error) {
 	domain, err := r.client.GetDomain(ctx, domainName)
 	if err != nil {
-		return domainDKIMResourceModel{}, err
+		return domainDKIMResourceModel{}, false, err
 	}
 
 	for _, detail := range domain.DKIMDetails {
@@ -246,20 +278,31 @@ func (r *domainDKIMResource) refreshState(ctx context.Context, domainName string
 			continue
 		}
 
+		verified := dkimStatusVerified(detail.Status)
+
 		return domainDKIMResourceModel{
 			DomainName:      current.DomainName,
 			HashType:        current.HashType,
 			ID:              types.StringValue(joinID(domainName, detail.DKIMID)),
 			IsDefault:       types.BoolValue(detail.IsDefault),
-			IsVerified:      types.BoolValue(detail.Status == "true" || detail.Status == "verified"),
+			IsVerified:      types.BoolValue(verified),
 			MakeDefault:     current.MakeDefault,
 			PublicKey:       types.StringValue(detail.PublicKey),
 			Selector:        types.StringValue(detail.Selector),
 			VerifyPublicKey: current.VerifyPublicKey,
-		}, nil
+		}, verified, nil
 	}
 
-	return domainDKIMResourceModel{}, nil
+	return domainDKIMResourceModel{}, false, nil
+}
+
+func dkimStatusVerified(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "true", "verified":
+		return true
+	default:
+		return false
+	}
 }
 
 func stateIDPart(id string, index int) string {

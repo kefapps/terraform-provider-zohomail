@@ -80,11 +80,24 @@ func (r *domainSubdomainStrippingResource) Create(ctx context.Context, req resou
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, domainSubdomainStrippingResourceModel{
+	nextState, remove, err := r.refreshState(ctx, domainSubdomainStrippingResourceModel{
 		DomainName: plan.DomainName,
 		Enabled:    types.BoolValue(true),
 		ID:         types.StringValue(plan.DomainName.ValueString()),
-	})...)
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to refresh Zoho Mail subdomain stripping state", err.Error())
+		return
+	}
+	if remove {
+		resp.Diagnostics.AddError(
+			"Unable to confirm Zoho Mail subdomain stripping state",
+			"Zoho Mail reported the subdomain stripping resource as absent immediately after enablement.",
+		)
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &nextState)...)
 }
 
 func (r *domainSubdomainStrippingResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -95,8 +108,8 @@ func (r *domainSubdomainStrippingResource) Read(ctx context.Context, req resourc
 		return
 	}
 
-	domain, err := r.client.GetDomain(ctx, state.DomainName.ValueString())
-	if zohomail.IsNotFound(err) {
+	nextState, remove, err := r.refreshState(ctx, state)
+	if zohomail.IsNotFound(err) || remove {
 		resp.State.RemoveResource(ctx)
 		return
 	}
@@ -105,16 +118,7 @@ func (r *domainSubdomainStrippingResource) Read(ctx context.Context, req resourc
 		return
 	}
 
-	if !domain.SubDomainStripping {
-		resp.State.RemoveResource(ctx)
-		return
-	}
-
-	resp.Diagnostics.Append(resp.State.Set(ctx, domainSubdomainStrippingResourceModel{
-		DomainName: state.DomainName,
-		Enabled:    types.BoolValue(true),
-		ID:         types.StringValue(state.DomainName.ValueString()),
-	})...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &nextState)...)
 }
 
 func (r *domainSubdomainStrippingResource) Update(context.Context, resource.UpdateRequest, *resource.UpdateResponse) {
@@ -137,4 +141,35 @@ func (r *domainSubdomainStrippingResource) Delete(ctx context.Context, req resou
 func (r *domainSubdomainStrippingResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("domain_name"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("enabled"), true)...)
+}
+
+func (r *domainSubdomainStrippingResource) refreshState(ctx context.Context, current domainSubdomainStrippingResourceModel) (domainSubdomainStrippingResourceModel, bool, error) {
+	domain, err := r.client.GetDomain(ctx, current.DomainName.ValueString())
+	if err != nil {
+		return domainSubdomainStrippingResourceModel{}, false, err
+	}
+
+	if domain.SubDomainStrippingSet {
+		if !domain.SubDomainStripping {
+			return domainSubdomainStrippingResourceModel{}, true, nil
+		}
+
+		return domainSubdomainStrippingResourceModel{
+			DomainName: current.DomainName,
+			Enabled:    types.BoolValue(true),
+			ID:         types.StringValue(current.DomainName.ValueString()),
+		}, false, nil
+	}
+
+	enabled := current.Enabled
+	if enabled.IsNull() || enabled.IsUnknown() {
+		enabled = types.BoolValue(true)
+	}
+
+	return domainSubdomainStrippingResourceModel{
+		DomainName: current.DomainName,
+		Enabled:    enabled,
+		ID:         types.StringValue(current.DomainName.ValueString()),
+	}, false, nil
 }

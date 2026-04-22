@@ -1,6 +1,7 @@
 .PHONY: fmt test testacc generate install build coverage zoho-token release-check release-snapshot
 
 GORELEASER ?= ./scripts/run-goreleaser.sh
+GO_TEST_TIMEOUT ?= 30m
 
 fmt:
 	go fmt ./...
@@ -13,7 +14,7 @@ coverage:
 	go test -coverprofile=coverage.out ./...
 
 testacc:
-	TF_ACC=1 go test -v ./...
+	TF_ACC=1 go test -timeout $(GO_TEST_TIMEOUT) -v ./...
 
 generate:
 	go generate ./...

@@ -244,6 +244,11 @@ func (r *domainResource) ImportState(ctx context.Context, req resource.ImportSta
 }
 
 func domainStateFromRemote(current domainResourceModel, remote *zohomail.Domain) domainResourceModel {
+	subdomainStripping := types.BoolNull()
+	if remote.SubDomainStrippingSet {
+		subdomainStripping = types.BoolValue(remote.SubDomainStripping)
+	}
+
 	return domainResourceModel{
 		CNAMEVerificationCode: types.StringValue(remote.CNAMEVerificationCode),
 		CatchAllAddress:       types.StringValue(remote.CatchAllAddress),
@@ -257,7 +262,7 @@ func domainStateFromRemote(current domainResourceModel, remote *zohomail.Domain)
 		MailHostingEnabled:    types.BoolValue(remote.MailHostingEnabled),
 		MXStatus:              types.StringValue(remote.MXStatus),
 		SPFStatus:             types.StringValue(remote.SPFStatus),
-		SubDomainStripping:    types.BoolValue(remote.SubDomainStripping),
+		SubDomainStripping:    subdomainStripping,
 		TXTVerificationValue:  types.StringValue(remote.TXTVerificationValue),
 		VerificationStatus:    types.StringValue(remote.VerificationStatus),
 	}

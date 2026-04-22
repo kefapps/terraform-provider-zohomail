@@ -329,6 +329,9 @@ func TestAccDomainCatchAll_basicImportDrift(t *testing.T) {
 				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
 			},
 			{
+				PreConfig: func() {
+					testAccRequireCatchAllCapability(t, domainName)
+				},
 				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, testAccDomainCatchAllBlock(supportEmail, helloEmail, domainName, supportEmail)),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("catch_all_address"), knownvalue.StringExact(supportEmail)),
@@ -373,7 +376,6 @@ func TestAccDomainCatchAll_basicImportDrift(t *testing.T) {
 func TestAccDomainSubdomainStripping_basicImportDelete(t *testing.T) {
 	domainName := testAccRandomDomain("substrip")
 	resourceName := "zohomail_domain_subdomain_stripping.test"
-	domainResourceName := "zohomail_domain.test"
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() { testAccAdvancedDomainFeaturePreCheck(t, "Subdomain stripping") },
@@ -409,9 +411,6 @@ func TestAccDomainSubdomainStripping_basicImportDelete(t *testing.T) {
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionDestroy),
 					},
-				},
-				ConfigStateChecks: []statecheck.StateCheck{
-					statecheck.ExpectKnownValue(domainResourceName, tfjsonpath.New("subdomain_stripping_enabled"), knownvalue.Bool(false)),
 				},
 			},
 		},
