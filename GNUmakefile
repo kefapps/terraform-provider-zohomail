@@ -1,4 +1,6 @@
-.PHONY: fmt test testacc generate install build coverage sonar-local quality quality-status quality-reset zoho-token
+.PHONY: fmt test testacc generate install build coverage sonar-local quality quality-status quality-reset zoho-token release-check release-snapshot
+
+GORELEASER ?= goreleaser
 
 fmt:
 	go fmt ./...
@@ -21,6 +23,12 @@ install:
 
 build:
 	go build ./...
+
+release-check:
+	$(GORELEASER) check
+
+release-snapshot:
+	$(GORELEASER) release --snapshot --clean --skip=publish,sign
 
 zoho-token:
 	./scripts/zoho-oauth-token.sh --env-file ./.env.testacc
