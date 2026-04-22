@@ -31,7 +31,7 @@ make testacc
 
 Acceptance runs are **local only** for now. They are expected when a change touches Zoho Mail API behavior, Terraform lifecycle, import handling, idempotence, or drift detection.
 
-To bootstrap or refresh Zoho OAuth tokens in `.env.testacc`, run:
+To bootstrap or refresh Zoho OAuth tokens in a local `.env.testacc` created from `.env.testacc.example`, run:
 
 ```bash
 make zoho-token
@@ -173,7 +173,7 @@ For an unpublished provider, use `terraform plan` or `terraform apply` directly 
 
 ## Local Sonar Quality Gate
 
-This repository follows the same local quality-gate discipline as `../goose/keftionnaire`:
+This repository exposes an optional local SonarQube quality gate for stricter manual certification:
 
 - `make sonar-local`: local Sonar scan for work-in-progress debugging
 - `make quality`: strict local certification on a clean worktree, intended before push
@@ -205,6 +205,14 @@ Operational runbooks:
 
 - `docs/ops/testing.md`
 - `docs/ops/release.md`
+
+## Contributing And Security
+
+- Contribution workflow and validation expectations: `CONTRIBUTING.md`
+- Vulnerability reporting posture: `SECURITY.md`
+- Maintainer and automation guardrails: `AGENTS.md`
+
+Use the GitHub issue templates for bugs and feature requests. Do not open a public issue for a suspected security vulnerability.
 
 ## Release Policy
 

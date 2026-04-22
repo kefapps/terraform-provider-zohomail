@@ -97,9 +97,9 @@ func TestValidatedVerificationMethod(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		input    string
-		want     string
-		wantErr  bool
+		input   string
+		want    string
+		wantErr bool
 	}{
 		{input: "txt", want: "txt"},
 		{input: " CNAME ", want: "cname"},
