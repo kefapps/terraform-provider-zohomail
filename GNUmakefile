@@ -1,4 +1,4 @@
-.PHONY: fmt test testacc generate install build coverage sonar-local quality quality-status quality-reset zoho-token release-check release-snapshot
+.PHONY: fmt test testacc generate generate-check docs-validate install build coverage sonar-local quality quality-status quality-reset zoho-token release-check release-snapshot
 
 GORELEASER ?= goreleaser
 
@@ -17,6 +17,13 @@ testacc:
 
 generate:
 	go generate ./...
+
+generate-check:
+	$(MAKE) generate
+	git diff --exit-code
+
+docs-validate:
+	go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name zohomail
 
 install:
 	go install .

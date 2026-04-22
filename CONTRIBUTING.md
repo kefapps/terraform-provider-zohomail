@@ -22,7 +22,7 @@ make generate
 go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name zohomail
 ```
 
-This repository does not rely on a full GitHub Actions CI gate yet, so local validation matters.
+This repository now mirrors the main pull request checks in GitHub Actions, but local validation still matters because acceptance coverage remains intentionally local-only.
 
 ## Acceptance Tests
 
