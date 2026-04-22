@@ -6,6 +6,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -221,14 +222,17 @@ func (r *domainDKIMResource) Delete(ctx context.Context, req resource.DeleteRequ
 }
 
 func (r *domainDKIMResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	parts, err := splitID(req.ID, 2)
+	domainName, dkimID, hashType, err := parseDomainDKIMImportID(req.ID)
 	if err != nil {
-		resp.Diagnostics.AddError("Invalid DKIM import ID", fmt.Sprintf("Expected `<domain_name>:<dkim_id>`, got %q.", req.ID))
+		resp.Diagnostics.AddError("Invalid DKIM import ID", fmt.Sprintf("Expected `<domain_name>:<dkim_id>` or `<domain_name>:<dkim_id>:<hash_type>`, got %q.", req.ID))
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("domain_name"), parts[0])...)
-	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("domain_name"), domainName)...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), joinID(domainName, dkimID))...)
+	if !hashType.IsNull() {
+		resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("hash_type"), hashType)...)
+	}
 }
 
 func (r *domainDKIMResource) refreshState(ctx context.Context, domainName string, dkimID string, current domainDKIMResourceModel) (domainDKIMResourceModel, error) {
@@ -265,4 +269,25 @@ func stateIDPart(id string, index int) string {
 	}
 
 	return parts[index]
+}
+
+func parseDomainDKIMImportID(raw string) (string, string, types.String, error) {
+	parts := strings.Split(strings.TrimSpace(raw), ":")
+	if len(parts) != 2 && len(parts) != 3 {
+		return "", "", types.StringNull(), fmt.Errorf("expected ID in the form <domain_name>:<dkim_id> or <domain_name>:<dkim_id>:<hash_type>")
+	}
+
+	for idx, part := range parts {
+		parts[idx] = strings.TrimSpace(part)
+		if parts[idx] == "" {
+			return "", "", types.StringNull(), fmt.Errorf("ID part %d cannot be empty", idx+1)
+		}
+	}
+
+	hashType := types.StringNull()
+	if len(parts) == 3 {
+		hashType = types.StringValue(parts[2])
+	}
+
+	return parts[0], parts[1], hashType, nil
 }
