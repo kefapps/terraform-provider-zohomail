@@ -1,6 +1,6 @@
 .PHONY: fmt test testacc generate install build coverage zoho-token release-check release-snapshot
 
-GORELEASER ?= goreleaser
+GORELEASER ?= ./scripts/run-goreleaser.sh
 
 fmt:
 	go fmt ./...

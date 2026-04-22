@@ -15,17 +15,28 @@ The repo now includes:
 Before cutting a real public tag, make sure all of the following are in place:
 
 - the GitHub repository is public under the `kefapps` namespace
-- GitHub Actions secrets `GPG_PRIVATE_KEY` and `PASSPHRASE` are configured
+- a dedicated 1Password service account exists for this provider release flow, with read access limited to the release-signing item
+- GitHub Actions secret `OP_SERVICE_ACCOUNT_TOKEN` is configured for the repo; an org-level secret scoped only to `terraform-provider-zohomail` is the preferred setup
+- GitHub Actions variables `OP_GPG_PRIVATE_KEY_REF` and `OP_GPG_PASSPHRASE_REF` are configured with the non-secret `op://...` references that point to the dedicated 1Password release-signing item
 - the matching GPG public key is uploaded to Terraform Registry
 - the provider `kefapps/zohomail` has been onboarded in Terraform Registry
 
-Do not assume a published provider exists until those four prerequisites are satisfied.
+Do not assume a published provider exists until those prerequisites are satisfied.
 
 ## What Must Stay True Before Any Public Release
 
 - `CHANGELOG.md` is updated under `Unreleased`
 - generated docs in `docs/` match the current schema
 - `examples/resources/*/resource.tf` remain accurate
+- the tag commit passes the release validation gate in GitHub Actions:
+
+```bash
+make test
+make build
+make generate
+go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name zohomail
+```
+
 - the local validation gate passes:
 
 ```bash
@@ -39,12 +50,14 @@ go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --pr
 
 ## Local Release Rehearsal
 
-If `goreleaser` is installed on your machine, use these commands:
+Use these commands:
 
 ```bash
 make release-check
 make release-snapshot
 ```
+
+`make release-check` and `make release-snapshot` bootstrap the pinned GoReleaser version through `scripts/run-goreleaser.sh`, so they do not require a preinstalled global `goreleaser` binary and they do not mutate the repo `go.sum`.
 
 `make release-snapshot` intentionally skips `publish` and `sign` so the release packaging can be rehearsed locally without GitHub credentials or a local GPG signing setup.
 
@@ -65,5 +78,5 @@ Once the external prerequisites are in place and `main` is validated:
 
 1. update `CHANGELOG.md`
 2. create and push a tag such as `v0.1.0`
-3. let `.github/workflows/release.yml` build the artifacts and create the GitHub Release
+3. let `.github/workflows/release.yml` rerun the validation gate, load the signing key from 1Password, build the artifacts, and create the GitHub Release
 4. complete the Terraform Registry-side publication flow if this is the first release
