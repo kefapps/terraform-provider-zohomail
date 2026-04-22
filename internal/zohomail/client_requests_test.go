@@ -353,7 +353,7 @@ func TestClientDomainMutationRequests(t *testing.T) {
 			name:             "VerifySPF",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"mode":"VerifySpfRecord"`,
+			wantBodyContains: `"mode":"verifySpfRecord"`,
 			responseBody:     `{"status":{"code":200},"data":{"spfstatus":true}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()

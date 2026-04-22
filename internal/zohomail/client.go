@@ -577,7 +577,7 @@ func (c *Client) DisableMailHosting(ctx context.Context, domainName string) erro
 func (c *Client) VerifySPF(ctx context.Context, domainName string) error {
 	return c.retryVerification(ctx, func(ctx context.Context) error {
 		var response spfVerificationResponse
-		if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "VerifySpfRecord"}, &response); err != nil {
+		if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "verifySpfRecord"}, &response); err != nil {
 			return err
 		}
 
