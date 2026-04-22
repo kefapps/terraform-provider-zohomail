@@ -54,6 +54,7 @@ type Client struct {
 
 type APIError struct {
 	Description string
+	Details     string
 	Message     string
 	StatusCode  int
 	ZohoCode    int
@@ -61,12 +62,20 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	switch {
+	case e.Message != "" && e.Description != "" && e.Details != "":
+		return fmt.Sprintf("zoho mail api error (%d/%d): %s: %s (%s)", e.StatusCode, e.ZohoCode, e.Description, e.Message, e.Details)
 	case e.Message != "" && e.Description != "":
 		return fmt.Sprintf("zoho mail api error (%d/%d): %s: %s", e.StatusCode, e.ZohoCode, e.Description, e.Message)
+	case e.Description != "" && e.Details != "":
+		return fmt.Sprintf("zoho mail api error (%d/%d): %s (%s)", e.StatusCode, e.ZohoCode, e.Description, e.Details)
 	case e.Description != "":
 		return fmt.Sprintf("zoho mail api error (%d/%d): %s", e.StatusCode, e.ZohoCode, e.Description)
+	case e.Message != "" && e.Details != "":
+		return fmt.Sprintf("zoho mail api error (%d/%d): %s (%s)", e.StatusCode, e.ZohoCode, e.Message, e.Details)
 	case e.Message != "":
 		return fmt.Sprintf("zoho mail api error (%d/%d): %s", e.StatusCode, e.ZohoCode, e.Message)
+	case e.Details != "":
+		return fmt.Sprintf("zoho mail api error (%d/%d): %s", e.StatusCode, e.ZohoCode, e.Details)
 	default:
 		return fmt.Sprintf("zoho mail api error (%d/%d)", e.StatusCode, e.ZohoCode)
 	}
@@ -79,6 +88,10 @@ func IsNotFound(err error) bool {
 	}
 
 	return false
+}
+
+func IsDisableMailHostingRequired(err error) bool {
+	return isDisableMailHostingRequiredError(err)
 }
 
 func BaseURLForDataCenter(dataCenter string) (string, error) {
@@ -136,7 +149,7 @@ type apiStatus struct {
 }
 
 type mailboxResponse struct {
-	AccountID       string          `json:"accountId"`
+	AccountID       exactString     `json:"accountId"`
 	Country         string          `json:"country"`
 	DisplayName     string          `json:"displayName"`
 	EmailAddress    []emailAddress  `json:"emailAddress"`
@@ -149,7 +162,35 @@ type mailboxResponse struct {
 	Role            string          `json:"roleName"`
 	SendMailDetails json.RawMessage `json:"sendMailDetails"`
 	TimeZone        string          `json:"timeZone"`
-	ZUID            string          `json:"zuid"`
+	ZUID            exactString     `json:"zuid"`
+}
+
+type exactString string
+
+func (s *exactString) UnmarshalJSON(data []byte) error {
+	raw := bytes.TrimSpace(data)
+	if bytes.Equal(raw, []byte("null")) {
+		*s = ""
+		return nil
+	}
+
+	if len(raw) > 0 && raw[0] == '"' {
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			return err
+		}
+
+		*s = exactString(text)
+		return nil
+	}
+
+	var number json.Number
+	if err := json.Unmarshal(raw, &number); err != nil {
+		return fmt.Errorf("decode exact string: %w", err)
+	}
+
+	*s = exactString(number.String())
+	return nil
 }
 
 type emailAddress struct {
@@ -263,6 +304,7 @@ type Domain struct {
 	MXStatus              string
 	SPFStatus             string
 	SubDomainStripping    bool
+	TXTVerificationValue  string
 	VerificationStatus    string
 }
 
@@ -274,6 +316,25 @@ type DKIMDetail struct {
 	Status    string
 }
 
+type verificationError struct {
+	code    string
+	kind    string
+	message string
+}
+
+func (e *verificationError) Error() string {
+	switch {
+	case e.message != "" && e.code != "":
+		return fmt.Sprintf("zoho mail %s verification failed: %s (%s)", e.kind, e.message, e.code)
+	case e.message != "":
+		return fmt.Sprintf("zoho mail %s verification failed: %s", e.kind, e.message)
+	case e.code != "":
+		return fmt.Sprintf("zoho mail %s verification failed: %s", e.kind, e.code)
+	default:
+		return fmt.Sprintf("zoho mail %s verification failed", e.kind)
+	}
+}
+
 type CreateDKIMInput struct {
 	DomainName string
 	HashType   string
@@ -282,16 +343,16 @@ type CreateDKIMInput struct {
 
 func (c *Client) CreateMailbox(ctx context.Context, input CreateMailboxInput) (*Mailbox, error) {
 	payload := map[string]any{
-		"country":         input.Country,
-		"displayName":     input.DisplayName,
-		"firstName":       input.FirstName,
-		"lastName":        input.LastName,
-		"mailboxAddress":  input.PrimaryEmailAddress,
-		"oneTimePassword": input.OneTimePassword,
-		"password":        input.InitialPassword,
-		"roleName":        input.Role,
-		"timeZone":        input.TimeZone,
-		"userLanguage":    input.Language,
+		"country":             input.Country,
+		"displayName":         input.DisplayName,
+		"firstName":           input.FirstName,
+		"language":            input.Language,
+		"lastName":            input.LastName,
+		"oneTimePassword":     input.OneTimePassword,
+		"password":            input.InitialPassword,
+		"primaryEmailAddress": input.PrimaryEmailAddress,
+		"role":                input.Role,
+		"timeZone":            input.TimeZone,
 	}
 
 	var response mailboxResponse
@@ -481,46 +542,66 @@ func (c *Client) VerifyDomain(ctx context.Context, domainName string, method str
 		return fmt.Errorf("unsupported domain verification method %q", method)
 	}
 
-	var response verificationResponse
-	if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": mode}, &response); err != nil {
-		return err
-	}
+	return c.retryVerification(ctx, func(ctx context.Context) error {
+		var response verificationResponse
+		if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": mode}, &response); err != nil {
+			return err
+		}
 
-	if !response.Status {
-		return verificationFailure("domain", response.Message, response.Error)
-	}
+		if !response.Status {
+			return verificationFailure("domain", response.Message, response.Error)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 func (c *Client) EnableMailHosting(ctx context.Context, domainName string) error {
-	return c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "enableMailHosting"}, nil)
+	err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "enableMailHosting"}, nil)
+	if isAlreadyEnabledError(err) {
+		return nil
+	}
+
+	return err
+}
+
+func (c *Client) DisableMailHosting(ctx context.Context, domainName string) error {
+	err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "disableMailHosting"}, nil)
+	if isAlreadyDisabledError(err) {
+		return nil
+	}
+
+	return err
 }
 
 func (c *Client) VerifySPF(ctx context.Context, domainName string) error {
-	var response spfVerificationResponse
-	if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "verifySpfRecord"}, &response); err != nil {
-		return err
-	}
+	return c.retryVerification(ctx, func(ctx context.Context) error {
+		var response spfVerificationResponse
+		if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "verifySpfRecord"}, &response); err != nil {
+			return err
+		}
 
-	if !response.SPFStatus {
-		return verificationFailure("SPF", response.Message, response.Error)
-	}
+		if !response.SPFStatus {
+			return verificationFailure("SPF", response.Message, response.Error)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 func (c *Client) VerifyMX(ctx context.Context, domainName string) error {
-	var response mxVerificationResponse
-	if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "verifyMxRecord"}, &response); err != nil {
-		return err
-	}
+	return c.retryVerification(ctx, func(ctx context.Context) error {
+		var response mxVerificationResponse
+		if err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", domainName), map[string]any{"mode": "verifyMxRecord"}, &response); err != nil {
+			return err
+		}
 
-	if !response.MXStatus {
-		return verificationFailure("MX", response.Message, response.Error)
-	}
+		if !response.MXStatus {
+			return verificationFailure("MX", response.Message, response.Error)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 func (c *Client) SetPrimaryDomain(ctx context.Context, domainName string) error {
@@ -529,8 +610,8 @@ func (c *Client) SetPrimaryDomain(ctx context.Context, domainName string) error 
 
 func (c *Client) AddDomainAlias(ctx context.Context, primaryDomain string, aliasDomain string) error {
 	payload := map[string]any{
-		"aliasDomainName": aliasDomain,
-		"mode":            "addAliasDomain",
+		"domainAlias": aliasDomain,
+		"mode":        "makeDomainAsAlias",
 	}
 
 	return c.doJSON(ctx, http.MethodPut, c.orgPath("domains", primaryDomain), payload, nil)
@@ -538,16 +619,29 @@ func (c *Client) AddDomainAlias(ctx context.Context, primaryDomain string, alias
 
 func (c *Client) DeleteDomainAlias(ctx context.Context, primaryDomain string, aliasDomain string) error {
 	payload := map[string]any{
-		"aliasDomainName": aliasDomain,
-		"mode":            "deleteAliasDomain",
+		"domainAlias": aliasDomain,
+		"mode":        "removeDomainAsAlias",
 	}
 
-	return c.doJSON(ctx, http.MethodPut, c.orgPath("domains", primaryDomain), payload, nil)
+	err := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", primaryDomain), payload, nil)
+	if err == nil {
+		return nil
+	}
+
+	fallback := map[string]any{
+		"domainAlias": aliasDomain,
+		"mode":        "removeDomainAlias",
+	}
+
+	if fallbackErr := c.doJSON(ctx, http.MethodPut, c.orgPath("domains", primaryDomain), fallback, nil); fallbackErr == nil {
+		return nil
+	}
+
+	return err
 }
 
 func (c *Client) CreateDKIM(ctx context.Context, input CreateDKIMInput) (*DKIMDetail, error) {
 	payload := map[string]any{
-		"dkimType": "custom",
 		"hashType": input.HashType,
 		"mode":     "addDkimDetail",
 		"selector": input.Selector,
@@ -602,15 +696,49 @@ func verificationFailure(kind string, message string, errorCode string) error {
 	message = strings.TrimSpace(message)
 	errorCode = strings.TrimSpace(errorCode)
 
-	switch {
-	case message != "" && errorCode != "":
-		return fmt.Errorf("zoho mail %s verification failed: %s (%s)", kind, message, errorCode)
-	case message != "":
-		return fmt.Errorf("zoho mail %s verification failed: %s", kind, message)
-	case errorCode != "":
-		return fmt.Errorf("zoho mail %s verification failed: %s", kind, errorCode)
-	default:
-		return fmt.Errorf("zoho mail %s verification failed", kind)
+	return &verificationError{
+		code:    errorCode,
+		kind:    kind,
+		message: message,
+	}
+}
+
+func isRetryableVerificationError(err error) bool {
+	var verificationErr *verificationError
+	return errors.As(err, &verificationErr)
+}
+
+func (c *Client) retryVerification(ctx context.Context, fn func(context.Context) error) error {
+	const (
+		retryDelay   = 5 * time.Second
+		retryTimeout = 2 * time.Minute
+	)
+
+	retryCtx, cancel := context.WithTimeout(ctx, retryTimeout)
+	defer cancel()
+
+	var lastErr error
+
+	for {
+		lastErr = fn(retryCtx)
+		if lastErr == nil {
+			return nil
+		}
+		if isAlreadyVerifiedError(lastErr) {
+			return nil
+		}
+		if !isRetryableVerificationError(lastErr) {
+			return lastErr
+		}
+
+		select {
+		case <-retryCtx.Done():
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return fmt.Errorf("zoho mail verification still pending after %s: %w", retryTimeout, lastErr)
+		case <-time.After(retryDelay):
+		}
 	}
 }
 
@@ -662,7 +790,7 @@ func (c *Client) doJSON(ctx context.Context, method string, endpoint string, pay
 	}
 
 	if response.StatusCode >= http.StatusBadRequest || envelope.Status.Code >= http.StatusBadRequest {
-		return apiErrorFromEnvelope(response.StatusCode, envelope.Status)
+		return apiErrorFromEnvelope(response.StatusCode, envelope.Status, envelope.Data)
 	}
 
 	if out == nil || len(bytes.TrimSpace(envelope.Data)) == 0 || bytes.Equal(bytes.TrimSpace(envelope.Data), []byte("null")) {
@@ -724,17 +852,86 @@ func emptyBodyError(statusCode int, status string, rawBody []byte) error {
 	return nil
 }
 
-func apiErrorFromEnvelope(statusCode int, status apiStatus) error {
+func apiErrorFromEnvelope(statusCode int, status apiStatus, rawData json.RawMessage) error {
 	if status.Code != 0 {
 		statusCode = status.Code
 	}
 
 	return &APIError{
 		Description: status.Description,
+		Details:     apiErrorDetails(rawData),
 		Message:     status.Message,
 		StatusCode:  statusCode,
 		ZohoCode:    status.Code,
 	}
+}
+
+func apiErrorDetails(rawData json.RawMessage) string {
+	if len(bytes.TrimSpace(rawData)) == 0 || bytes.Equal(bytes.TrimSpace(rawData), []byte("null")) {
+		return ""
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rawData, &payload); err != nil {
+		return ""
+	}
+
+	parts := make([]string, 0, 3)
+	for _, key := range []string{"moreInfo", "error", "errorData"} {
+		value, ok := payload[key]
+		if !ok {
+			continue
+		}
+
+		text := strings.TrimSpace(stringValue(value))
+		if text == "" {
+			continue
+		}
+
+		parts = append(parts, text)
+	}
+
+	return strings.Join(parts, "; ")
+}
+
+func isAlreadyVerifiedError(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+
+	text := strings.ToUpper(strings.Join([]string{apiErr.Description, apiErr.Message, apiErr.Details}, " "))
+	return strings.Contains(text, "ALREADY_VERIFIED")
+}
+
+func isAlreadyEnabledError(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+
+	text := strings.ToUpper(strings.Join([]string{apiErr.Description, apiErr.Message, apiErr.Details}, " "))
+	return strings.Contains(text, "ALREADY ENABLED") || strings.Contains(text, "ALREADY_ENABLED")
+}
+
+func isAlreadyDisabledError(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+
+	text := strings.ToUpper(strings.Join([]string{apiErr.Description, apiErr.Message, apiErr.Details}, " "))
+	return strings.Contains(text, "NOT ENABLED") || strings.Contains(text, "ALREADY DISABLED") || strings.Contains(text, "ALREADY_DISABLED")
+}
+
+func isDisableMailHostingRequiredError(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+
+	text := strings.ToUpper(strings.Join([]string{apiErr.Description, apiErr.Message, apiErr.Details}, " "))
+	return strings.Contains(text, "RMV_HOSTING_BEFORE_DLT_DOMAIN")
 }
 
 func (c *Client) orgPath(parts ...string) string {
@@ -759,7 +956,7 @@ func apiPath(parts ...string) string {
 
 func convertMailbox(raw mailboxResponse) *Mailbox {
 	result := &Mailbox{
-		AccountID:      strings.TrimSpace(raw.AccountID),
+		AccountID:      strings.TrimSpace(string(raw.AccountID)),
 		Country:        strings.TrimSpace(raw.Country),
 		DisplayName:    strings.TrimSpace(raw.DisplayName),
 		FirstName:      strings.TrimSpace(raw.FirstName),
@@ -769,7 +966,7 @@ func convertMailbox(raw mailboxResponse) *Mailbox {
 		MailboxStatus:  strings.TrimSpace(raw.MailBoxStatus),
 		Role:           strings.TrimSpace(raw.Role),
 		TimeZone:       strings.TrimSpace(raw.TimeZone),
-		ZUID:           strings.TrimSpace(raw.ZUID),
+		ZUID:           strings.TrimSpace(string(raw.ZUID)),
 	}
 
 	result.EmailAddresses, result.MailboxAddress = convertEmailAddresses(raw.EmailAddress, result.MailboxAddress)
@@ -824,8 +1021,10 @@ func convertMailForwards(raw json.RawMessage) []MailForward {
 }
 
 func convertDomain(raw rawDomain) Domain {
+	cnameCode := stringValue(raw.CNAMEVerificationCode)
+
 	result := Domain{
-		CNAMEVerificationCode: stringValue(raw.CNAMEVerificationCode),
+		CNAMEVerificationCode: cnameCode,
 		CatchAllAddress:       strings.TrimSpace(raw.CatchAllAddress),
 		DomainID:              strings.TrimSpace(raw.DomainID),
 		DomainName:            strings.TrimSpace(raw.DomainName),
@@ -836,6 +1035,7 @@ func convertDomain(raw rawDomain) Domain {
 		MXStatus:              statusString(raw.MXStatus),
 		SPFStatus:             statusString(raw.SPFStatus),
 		SubDomainStripping:    boolValue(raw.SubDomainStripping),
+		TXTVerificationValue:  domainTXTVerificationValue(cnameCode),
 		VerificationStatus:    statusString(raw.VerificationStatus),
 	}
 
@@ -844,6 +1044,15 @@ func convertDomain(raw rawDomain) Domain {
 	}
 
 	return result
+}
+
+func domainTXTVerificationValue(cnameCode string) string {
+	if strings.TrimSpace(cnameCode) == "" {
+		return ""
+	}
+
+	// Zoho Mail TXT verification uses the zb code returned by the domain API.
+	return "zoho-verification=" + cnameCode + ".zmverify.zoho.com"
 }
 
 func convertDKIM(raw rawDKIM) DKIMDetail {

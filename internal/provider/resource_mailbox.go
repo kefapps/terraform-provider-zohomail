@@ -155,9 +155,18 @@ func (r *mailboxResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 
 func (r *mailboxResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var plan mailboxResourceModel
+	var initialPassword types.String
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("initial_password"), &initialPassword)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	if initialPassword.IsNull() || initialPassword.IsUnknown() {
+		resp.Diagnostics.AddError(
+			"Unable to read mailbox initial password",
+			"Terraform did not provide a known initial_password value in the resource configuration.",
+		)
 		return
 	}
 
@@ -165,7 +174,7 @@ func (r *mailboxResource) Create(ctx context.Context, req resource.CreateRequest
 		Country:             plan.Country.ValueString(),
 		DisplayName:         plan.DisplayName.ValueString(),
 		FirstName:           plan.FirstName.ValueString(),
-		InitialPassword:     plan.InitialPassword.ValueString(),
+		InitialPassword:     initialPassword.ValueString(),
 		Language:            plan.Language.ValueString(),
 		LastName:            plan.LastName.ValueString(),
 		OneTimePassword:     !plan.OneTimePassword.IsNull() && !plan.OneTimePassword.IsUnknown() && plan.OneTimePassword.ValueBool(),

@@ -38,7 +38,7 @@ resource "zohomail_domain_dkim" "example" {
 ### Optional
 
 - `make_default` (Boolean) Whether to set the DKIM selector as the domain default after creation.
-- `verify_public_key` (Boolean) Whether to trigger DKIM verification after DNS is ready.
+- `verify_public_key` (Boolean) Whether to trigger DKIM verification after DNS is ready. Zoho can surface DKIM propagation asynchronously, so this may need a later apply after DNS has settled.
 
 ### Read-Only
 

@@ -92,3 +92,39 @@ func TestMailboxResourceSchemaOneTimePasswordRequiresReplace(t *testing.T) {
 		t.Fatal("expected one_time_password to require replacement")
 	}
 }
+
+func TestValidatedVerificationMethod(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    string
+		want     string
+		wantErr  bool
+	}{
+		{input: "txt", want: "txt"},
+		{input: " CNAME ", want: "cname"},
+		{input: "html", want: "html"},
+		{input: "tx", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := validatedVerificationMethod(tc.input)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected validation error for %q", tc.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected validation error for %q: %v", tc.input, err)
+			}
+			if got != tc.want {
+				t.Fatalf("unexpected normalized verification method: got %q want %q", got, tc.want)
+			}
+		})
+	}
+}

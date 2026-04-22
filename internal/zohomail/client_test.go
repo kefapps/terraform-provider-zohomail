@@ -3,7 +3,10 @@
 
 package zohomail
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestBaseURLForDataCenter(t *testing.T) {
 	t.Parallel()
@@ -83,5 +86,34 @@ func TestConvertDomainNilVerificationCodes(t *testing.T) {
 	}
 	if domain.HTMLVerificationCode != "" {
 		t.Fatalf("expected empty HTML verification code, got %q", domain.HTMLVerificationCode)
+	}
+	if domain.TXTVerificationValue != "" {
+		t.Fatalf("expected empty TXT verification value, got %q", domain.TXTVerificationValue)
+	}
+}
+
+func TestConvertDomainTXTVerificationValue(t *testing.T) {
+	t.Parallel()
+
+	domain := convertDomain(rawDomain{CNAMEVerificationCode: "zb12345678"})
+	if domain.TXTVerificationValue != "zoho-verification=zb12345678.zmverify.zoho.com" {
+		t.Fatalf("unexpected TXT verification value, got %q", domain.TXTVerificationValue)
+	}
+}
+
+func TestConvertMailboxPreservesExactNumericIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	var raw mailboxResponse
+	if err := json.Unmarshal([]byte(`{"accountId":9223372036854775807,"zuid":2011402488612345678}`), &raw); err != nil {
+		t.Fatalf("unexpected mailbox json decode error: %v", err)
+	}
+
+	mailbox := convertMailbox(raw)
+	if mailbox.AccountID != "9223372036854775807" {
+		t.Fatalf("unexpected account id: %q", mailbox.AccountID)
+	}
+	if mailbox.ZUID != "2011402488612345678" {
+		t.Fatalf("unexpected zuid: %q", mailbox.ZUID)
 	}
 }

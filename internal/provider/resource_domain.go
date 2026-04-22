@@ -40,6 +40,7 @@ type domainResourceModel struct {
 	MXStatus              types.String `tfsdk:"mx_status"`
 	SPFStatus             types.String `tfsdk:"spf_status"`
 	SubDomainStripping    types.Bool   `tfsdk:"subdomain_stripping_enabled"`
+	TXTVerificationValue  types.String `tfsdk:"txt_verification_value"`
 	VerificationStatus    types.String `tfsdk:"verification_status"`
 }
 
@@ -73,18 +74,37 @@ func (r *domainResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"domain_id": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Zoho Mail domain identifier.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"html_verification_code": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "HTML verification code returned by Zoho Mail.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"cname_verification_code": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "CNAME verification code returned by Zoho Mail.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"txt_verification_value": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "TXT verification value to publish at the domain apex when using Zoho Mail TXT verification.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"verification_status": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Domain verification status returned by Zoho Mail.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"mail_hosting_enabled": schema.BoolAttribute{
 				Computed:            true,
@@ -93,14 +113,23 @@ func (r *domainResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"mx_status": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "MX verification status returned by Zoho Mail.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"spf_status": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "SPF verification status returned by Zoho Mail.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"dkim_status": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Aggregated DKIM status inferred from the default DKIM selector.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"is_primary": schema.BoolAttribute{
 				Computed:            true,
@@ -113,6 +142,9 @@ func (r *domainResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 			"catch_all_address": schema.StringAttribute{
 				Computed:            true,
 				MarkdownDescription: "Catch-all address reported by Zoho Mail, when available.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"subdomain_stripping_enabled": schema.BoolAttribute{
 				Computed:            true,
@@ -189,7 +221,19 @@ func (r *domainResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		return
 	}
 
-	if err := r.client.DeleteDomain(ctx, state.DomainName.ValueString()); err != nil && !zohomail.IsNotFound(err) {
+	err := r.client.DeleteDomain(ctx, state.DomainName.ValueString())
+	if zohomail.IsNotFound(err) {
+		return
+	}
+	if zohomail.IsDisableMailHostingRequired(err) {
+		if disableErr := r.client.DisableMailHosting(ctx, state.DomainName.ValueString()); disableErr != nil {
+			resp.Diagnostics.AddError("Unable to disable Zoho Mail hosting before domain deletion", disableErr.Error())
+			return
+		}
+
+		err = r.client.DeleteDomain(ctx, state.DomainName.ValueString())
+	}
+	if err != nil && !zohomail.IsNotFound(err) {
 		resp.Diagnostics.AddError("Unable to delete Zoho Mail domain", err.Error())
 	}
 }
@@ -214,6 +258,7 @@ func domainStateFromRemote(current domainResourceModel, remote *zohomail.Domain)
 		MXStatus:              types.StringValue(remote.MXStatus),
 		SPFStatus:             types.StringValue(remote.SPFStatus),
 		SubDomainStripping:    types.BoolValue(remote.SubDomainStripping),
+		TXTVerificationValue:  types.StringValue(remote.TXTVerificationValue),
 		VerificationStatus:    types.StringValue(remote.VerificationStatus),
 	}
 }

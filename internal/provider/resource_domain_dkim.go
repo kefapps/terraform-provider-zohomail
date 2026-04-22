@@ -87,7 +87,7 @@ func (r *domainDKIMResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"verify_public_key": schema.BoolAttribute{
 				Optional:            true,
-				MarkdownDescription: "Whether to trigger DKIM verification after DNS is ready.",
+				MarkdownDescription: "Whether to trigger DKIM verification after DNS is ready. Zoho can surface DKIM propagation asynchronously, so this may need a later apply after DNS has settled.",
 			},
 			"public_key": schema.StringAttribute{
 				Computed:            true,

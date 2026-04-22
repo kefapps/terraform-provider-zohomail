@@ -39,4 +39,5 @@ resource "zohomail_domain" "example" {
 - `mx_status` (String) MX verification status returned by Zoho Mail.
 - `spf_status` (String) SPF verification status returned by Zoho Mail.
 - `subdomain_stripping_enabled` (Boolean) Whether subdomain stripping is enabled for the domain.
+- `txt_verification_value` (String) TXT verification value to publish at the domain apex when using Zoho Mail TXT verification.
 - `verification_status` (String) Domain verification status returned by Zoho Mail.
