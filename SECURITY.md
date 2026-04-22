@@ -10,7 +10,24 @@ Once public releases exist, the repository will support the latest published rel
 
 Do **not** open a public GitHub issue for suspected vulnerabilities.
 
-GitHub private vulnerability reporting for `kefapps/terraform-provider-zohomail` is the canonical reporting path for this repository, and it is currently enabled. Use that private GitHub flow so the issue can be triaged and fixed before disclosure.
+This project does not currently provide a supported private vulnerability
+disclosure channel.
+
+Important limitations:
+
+- GitHub private vulnerability reporting may appear in the repository UI, but it
+  is not part of the supported governance baseline for this project and must not
+  be treated as a guaranteed or canonical reporting path.
+- No project email alias or other private contact channel is currently
+  documented.
+- Until a governed private reporting path exists, this repository cannot promise
+  confidential intake or coordinated disclosure handling.
+
+If you need to alert the maintainer before a supported private channel exists,
+do not publish exploit details, proof-of-concept code, secrets, or step-by-step
+reproduction in a public issue or pull request. Limit any public signal to a
+minimal note that a private security contact path is missing and that sensitive
+details are being withheld.
 
 Please include:
 
@@ -18,9 +35,5 @@ Please include:
 - impact and prerequisites
 - reproduction steps or proof of concept
 - any suggested mitigation
-
-The maintainer will aim to acknowledge the report quickly, confirm severity, and coordinate a fix before public disclosure when possible.
-
-If you cannot access GitHub private vulnerability reporting, do not disclose the issue publicly. Retry later rather than opening a public issue.
 
 For non-sensitive hardening ideas or general reliability issues, use the normal issue tracker instead.
