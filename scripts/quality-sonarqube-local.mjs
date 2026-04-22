@@ -16,7 +16,7 @@ const defaultScannerImage = "sonarsource/sonar-scanner-cli:12.1.0.3225_8.0.1";
 const tokenName = "terraform-provider-zohomail-local";
 const sharedEnvPath =
   process.env.SONAR_SHARED_ENV_PATH ??
-  path.resolve(repoRoot, "..", "goose", "keftionnaire", ".git", "ansyo-sonarqube", ".env.local");
+  path.join(stateDir, "shared.env");
 const mode = process.argv[2] ?? "bootstrap";
 
 async function main() {

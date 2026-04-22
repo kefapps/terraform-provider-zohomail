@@ -69,9 +69,15 @@ Some acceptance scenarios depend on tenant capabilities that are not universal a
 
 ## Bootstrap The Local Acceptance Env
 
-A local template is available in the repo root:
+A tracked example env file is available in the repo root:
 
-- `.env.testacc`
+- `.env.testacc.example`
+
+Copy it before loading or mutating local credentials:
+
+```bash
+cp ./.env.testacc.example ./.env.testacc
+```
 
 Load it into the current shell with:
 
@@ -104,7 +110,7 @@ make zoho-token
 - `ZOHOMAIL_ACCESS_TOKEN`
   Short-lived runtime token. `make zoho-token` updates it automatically from either `ZOHOMAIL_AUTHORIZATION_CODE` or `ZOHOMAIL_REFRESH_TOKEN`.
 - `ZOHOMAIL_TEST_DNS_ZONE_NAME`
-  This is the Cloudflare zone name you control for acceptance, for example `example.com` or `ansyo.ai`.
+  This is the Cloudflare zone name you control for acceptance, for example `example.com`.
 - `ZOHOMAIL_TEST_DNS_BASE_DOMAIN`
   Pick a delegated namespace under that zone that is safe to mutate, for example `tfacc.example.com`. The acceptance tests create random subdomains under this base domain.
 - `CLOUDFLARE_API_TOKEN`
@@ -116,7 +122,7 @@ You do not need to provide the Zoho TXT verification hash in the env file. The p
 
 1. Open the Zoho API Console and create a `Self Client`.
 2. In `Generate Code`, request scopes `ZohoMail.organization.accounts.ALL,ZohoMail.organization.domains.ALL`.
-3. Paste the generated code into `ZOHOMAIL_AUTHORIZATION_CODE` in `.env.testacc`.
+3. Paste the generated code into `ZOHOMAIL_AUTHORIZATION_CODE` in your local `.env.testacc`.
 4. Run `make zoho-token`.
 5. The script exchanges that code against the right regional Zoho Accounts endpoint, writes `ZOHOMAIL_REFRESH_TOKEN` and `ZOHOMAIL_ACCESS_TOKEN`, then clears `ZOHOMAIL_AUTHORIZATION_CODE`.
 6. On later runs, keep `ZOHOMAIL_REFRESH_TOKEN` and run `make zoho-token` again whenever you need a new `ZOHOMAIL_ACCESS_TOKEN`.
