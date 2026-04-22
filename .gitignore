@@ -9,3 +9,4 @@ coverage.out
 dist/
 reports/
 terraform-provider-zohomail
+.env.testacc
