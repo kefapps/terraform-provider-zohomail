@@ -477,7 +477,7 @@ func TestClientDomainAliasAndDKIMRequests(t *testing.T) {
 			name:             "CreateDKIM",
 			method:           http.MethodPut,
 			path:             testDomainPath,
-			wantBodyContains: `"selector":"terraform"`,
+			wantBodyContains: `"hashType":"sha256"`,
 			responseBody:     `{"status":{"code":200},"data":{"dkimId":"dk-1","selector":"terraform","publicKey":"pub","dkimStatus":"verified"}}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
@@ -602,6 +602,64 @@ func TestClientEnableMailHostingAlreadyEnabledIsSuccess(t *testing.T) {
 	client := testClient(t, http.MethodPut, testDomainPath, `"mode":"enableMailHosting"`, `{"status":{"code":400,"description":"Invalid Input"},"data":{"moreInfo":"MailHosting is already enabled for the domain","error":"MAILHOSTING_ALREADY_ENABLED"}}`)
 	if err := client.EnableMailHosting(context.Background(), testDomainExample); err != nil {
 		t.Fatalf("EnableMailHosting should treat already enabled as success, got %v", err)
+	}
+}
+
+func TestClientVerificationAPIErrorsAreNotRetried(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		run  func(*Client) error
+	}{
+		{
+			name: "VerifyDomain",
+			run: func(client *Client) error {
+				return client.VerifyDomain(context.Background(), testDomainExample, "txt")
+			},
+		},
+		{
+			name: "VerifySPF",
+			run: func(client *Client) error {
+				return client.VerifySPF(context.Background(), testDomainExample)
+			},
+		},
+		{
+			name: "VerifyMX",
+			run: func(client *Client) error {
+				return client.VerifyMX(context.Background(), testDomainExample)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			attempts := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				attempts++
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = io.WriteString(w, `{"status":{"code":401,"description":"Unauthorized"},"data":{"moreInfo":"Invalid OAuth token","error":"INVALID_OAUTHTOKEN"}}`)
+			}))
+			defer server.Close()
+
+			client := &Client{
+				accessToken:    "token",
+				baseURL:        server.URL,
+				httpClient:     server.Client(),
+				organizationID: "org",
+			}
+
+			err := tc.run(client)
+			if err == nil {
+				t.Fatal("expected verification API error, got nil")
+			}
+			if attempts != 1 {
+				t.Fatalf("expected a single verification attempt, got %d", attempts)
+			}
+		})
 	}
 }
 

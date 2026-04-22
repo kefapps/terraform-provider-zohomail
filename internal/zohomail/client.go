@@ -288,6 +288,25 @@ type DKIMDetail struct {
 	Status    string
 }
 
+type verificationError struct {
+	code    string
+	kind    string
+	message string
+}
+
+func (e *verificationError) Error() string {
+	switch {
+	case e.message != "" && e.code != "":
+		return fmt.Sprintf("zoho mail %s verification failed: %s (%s)", e.kind, e.message, e.code)
+	case e.message != "":
+		return fmt.Sprintf("zoho mail %s verification failed: %s", e.kind, e.message)
+	case e.code != "":
+		return fmt.Sprintf("zoho mail %s verification failed: %s", e.kind, e.code)
+	default:
+		return fmt.Sprintf("zoho mail %s verification failed", e.kind)
+	}
+}
+
 type CreateDKIMInput struct {
 	DomainName string
 	HashType   string
@@ -595,6 +614,7 @@ func (c *Client) DeleteDomainAlias(ctx context.Context, primaryDomain string, al
 
 func (c *Client) CreateDKIM(ctx context.Context, input CreateDKIMInput) (*DKIMDetail, error) {
 	payload := map[string]any{
+		"hashType": input.HashType,
 		"mode":     "addDkimDetail",
 		"selector": input.Selector,
 	}
@@ -648,16 +668,16 @@ func verificationFailure(kind string, message string, errorCode string) error {
 	message = strings.TrimSpace(message)
 	errorCode = strings.TrimSpace(errorCode)
 
-	switch {
-	case message != "" && errorCode != "":
-		return fmt.Errorf("zoho mail %s verification failed: %s (%s)", kind, message, errorCode)
-	case message != "":
-		return fmt.Errorf("zoho mail %s verification failed: %s", kind, message)
-	case errorCode != "":
-		return fmt.Errorf("zoho mail %s verification failed: %s", kind, errorCode)
-	default:
-		return fmt.Errorf("zoho mail %s verification failed", kind)
+	return &verificationError{
+		code:    errorCode,
+		kind:    kind,
+		message: message,
 	}
+}
+
+func isRetryableVerificationError(err error) bool {
+	var verificationErr *verificationError
+	return errors.As(err, &verificationErr)
 }
 
 func (c *Client) retryVerification(ctx context.Context, fn func(context.Context) error) error {
@@ -678,6 +698,9 @@ func (c *Client) retryVerification(ctx context.Context, fn func(context.Context)
 		}
 		if isAlreadyVerifiedError(lastErr) {
 			return nil
+		}
+		if !isRetryableVerificationError(lastErr) {
+			return lastErr
 		}
 
 		select {
