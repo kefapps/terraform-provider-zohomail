@@ -32,6 +32,12 @@ Acceptance tests are local-only and require a dedicated Zoho Mail test tenant pl
 
 Full acceptance guidance lives in [docs/ops/testing.md](docs/ops/testing.md).
 
+## License And Contributions
+
+This repository is published under `MPL-2.0`. By contributing to this repository, you agree that your contributions are submitted under the same license.
+
+Keep existing SPDX license headers in source files, and add them to new provider source files when they are part of the distributed codebase.
+
 ## Documentation Expectations
 
 - Keep `CHANGELOG.md` updated under `Unreleased` when the change is user-visible.
