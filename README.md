@@ -171,6 +171,13 @@ provider "zohomail" {
 
 For an unpublished provider, use `terraform plan` or `terraform apply` directly once the `dev_overrides` entry is in place. Do not rely on `terraform init` to install `kefapps/zohomail` from the public Registry before the provider is published there, because Terraform will still try to resolve the source address remotely.
 
+## License
+
+This repository is published under `MPL-2.0`. See `LICENSE`.
+
+That choice keeps the provider source itself explicitly open while remaining compatible with normal Terraform usage, downstream modules, and larger infrastructure codebases that only consume the released provider binary.
+
+Source files that are part of the provider implementation carry SPDX headers aligned with `MPL-2.0`.
 ## Documentation
 
 Provider documentation is generated with `tfplugindocs`:
@@ -190,6 +197,7 @@ Operational runbooks:
 
 ## Contributing And Security
 
+- License and contribution terms: `LICENSE`
 - Contribution workflow and validation expectations: `CONTRIBUTING.md`
 - Vulnerability reporting posture: `SECURITY.md`
 - Maintainer and automation guardrails: `AGENTS.md`
