@@ -4,6 +4,8 @@
 
 This repository targets the public provider source address `kefapps/zohomail` and implements an admin-focused v1 surface on top of the official Zoho Mail APIs.
 
+The repository is licensed under [Apache-2.0](LICENSE).
+
 ## Requirements
 
 - Go `>= 1.25.8`
@@ -16,10 +18,10 @@ make fmt
 make test
 make build
 make generate
-go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate
+go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name zohomail
 ```
 
-This is the default local validation gate for normal provider work. Pull requests are also expected to pass the GitHub Actions checks `Build`, `Unit Tests`, `Generate Check`, and `Docs Validate`.
+This is the default local validation gate for normal provider work. Pull requests are also expected to pass the GitHub Actions checks `Build`, `Unit Tests`, `Generate Check`, and `Docs Validate`, while live acceptance remains local-only.
 
 ## Acceptance Tests
 
@@ -173,11 +175,11 @@ For an unpublished provider, use `terraform plan` or `terraform apply` directly 
 
 ## License
 
-This repository is published under `MPL-2.0`. See `LICENSE`.
+This repository is published under `Apache-2.0`. See `LICENSE`.
 
-That choice keeps the provider source itself explicitly open while remaining compatible with normal Terraform usage, downstream modules, and larger infrastructure codebases that only consume the released provider binary.
+That choice keeps the provider easy to adopt in normal Terraform usage, downstream modules, and larger infrastructure codebases while preserving an explicit patent grant and a familiar permissive OSS posture.
 
-Source files that are part of the provider implementation carry SPDX headers aligned with `MPL-2.0`.
+Source files that are part of the provider implementation carry SPDX headers aligned with `Apache-2.0`.
 ## Documentation
 
 Provider documentation is generated with `tfplugindocs`:

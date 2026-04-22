@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Kefjbo
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: Apache-2.0
 
 package provider
 

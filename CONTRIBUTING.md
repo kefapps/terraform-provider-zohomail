@@ -4,6 +4,8 @@ Thanks for contributing to `terraform-provider-zohomail`.
 
 This repository is intentionally scoped to a standalone Terraform provider for **Zoho Mail only**. Changes should keep the provider aligned with the public source address `kefapps/zohomail` and with normal Terraform Registry expectations.
 
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this repository is licensed under Apache-2.0, consistent with the repository license.
+
 ## Before You Start
 
 - Check whether an issue already exists for the bug, feature, or design change you want to work on.
@@ -22,7 +24,7 @@ make generate
 go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name zohomail
 ```
 
-This repository now mirrors the main pull request checks in GitHub Actions, but local validation still matters because acceptance coverage remains intentionally local-only.
+This repository now mirrors the main pull request checks in GitHub Actions, but local validation still matters because acceptance coverage remains intentionally local-only and because it shortens review feedback loops.
 
 ## Acceptance Tests
 
@@ -34,7 +36,7 @@ Full acceptance guidance lives in [docs/ops/testing.md](docs/ops/testing.md).
 
 ## License And Contributions
 
-This repository is published under `MPL-2.0`. By contributing to this repository, you agree that your contributions are submitted under the same license.
+This repository is published under `Apache-2.0`. By contributing to this repository, you agree that your contributions are submitted under the same license unless you explicitly state otherwise.
 
 Keep existing SPDX license headers in source files, and add them to new provider source files when they are part of the distributed codebase.
 
