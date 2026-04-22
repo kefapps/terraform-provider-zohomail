@@ -21,8 +21,8 @@ resource "zohomail_domain_onboarding" "example" {
   domain_name         = zohomail_domain.example.domain_name
   verification_method = "txt"
   enable_mail_hosting = true
-  verify_spf          = true
-  verify_mx           = true
+  verify_spf          = false
+  verify_mx           = false
   make_primary        = false
 }
 ```
@@ -39,8 +39,8 @@ resource "zohomail_domain_onboarding" "example" {
 
 - `enable_mail_hosting` (Boolean) Enable Zoho Mail hosting after domain verification.
 - `make_primary` (Boolean) Mark the domain as the primary Zoho Mail domain after verification.
-- `verify_mx` (Boolean) Ask Zoho Mail to verify MX records.
-- `verify_spf` (Boolean) Ask Zoho Mail to verify the SPF DNS record.
+- `verify_mx` (Boolean) Ask Zoho Mail to verify MX records. Zoho can surface MX propagation asynchronously, so this flag may need a later apply after DNS has settled.
+- `verify_spf` (Boolean) Ask Zoho Mail to verify the SPF DNS record. Zoho can surface SPF propagation asynchronously, so this flag may need a later apply after DNS has settled.
 
 ### Read-Only
 

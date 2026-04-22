@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/statecheck"
 	"github.com/hashicorp/terraform-plugin-testing/tfjsonpath"
 
@@ -22,21 +23,24 @@ import (
 )
 
 const (
-	testAccEnvDNSBaseDomain         = "ZOHOMAIL_TEST_DNS_BASE_DOMAIN"
-	testAccEnvDNSProvider           = "ZOHOMAIL_TEST_DNS_PROVIDER"
-	testAccEnvDNSResolver           = "ZOHOMAIL_TEST_DNS_RESOLVER"
-	testAccEnvDNSTimeout            = "ZOHOMAIL_TEST_DNS_TIMEOUT"
-	testAccEnvDNSVerificationTarget = "ZOHOMAIL_TEST_DNS_VERIFICATION_TARGET"
-	testAccEnvDNSZoneName           = "ZOHOMAIL_TEST_DNS_ZONE_NAME"
-	testAccEnvMX10                  = "ZOHOMAIL_TEST_DNS_MX_10"
-	testAccEnvMX20                  = "ZOHOMAIL_TEST_DNS_MX_20"
-	testAccEnvMX50                  = "ZOHOMAIL_TEST_DNS_MX_50"
-	testAccEnvSPFValue              = "ZOHOMAIL_TEST_DNS_SPF_VALUE"
+	testAccEnvDNSBaseDomain  = "ZOHOMAIL_TEST_DNS_BASE_DOMAIN"
+	testAccEnvAdvancedDomain = "ZOHOMAIL_TEST_ENABLE_ADVANCED_DOMAIN_FEATURES"
+	testAccEnvMailboxFlow    = "ZOHOMAIL_TEST_ENABLE_MAILBOX_LIFECYCLE"
+	testAccEnvDNSProvider    = "ZOHOMAIL_TEST_DNS_PROVIDER"
+	testAccEnvDNSResolver    = "ZOHOMAIL_TEST_DNS_RESOLVER"
+	testAccEnvMultiMailbox   = "ZOHOMAIL_TEST_ENABLE_MULTI_MAILBOX"
+	testAccEnvSlowDNSVerify  = "ZOHOMAIL_TEST_ENABLE_SLOW_DNS_VERIFICATION"
+	testAccEnvDNSTimeout     = "ZOHOMAIL_TEST_DNS_TIMEOUT"
+	testAccEnvDNSZoneName    = "ZOHOMAIL_TEST_DNS_ZONE_NAME"
+	testAccEnvMX10           = "ZOHOMAIL_TEST_DNS_MX_10"
+	testAccEnvMX20           = "ZOHOMAIL_TEST_DNS_MX_20"
+	testAccEnvMX50           = "ZOHOMAIL_TEST_DNS_MX_50"
+	testAccEnvSPFValue       = "ZOHOMAIL_TEST_DNS_SPF_VALUE"
 
 	testAccDNSProviderCloudflare     = "cloudflare"
+	testAccDefaultCloudflareResolver = "1.1.1.1:53"
 	testAccDefaultDNSVerificationTTL = 60
 	testAccDefaultDNSTimeout         = 5 * time.Minute
-	testAccDefaultDNSVerificationTag = "zmverify.zoho.com"
 	testAccDefaultSPFValue           = "v=spf1 include:zohomail.com -all"
 	testAccDefaultMX10               = "mx.zoho.com"
 	testAccDefaultMX20               = "mx2.zoho.com"
@@ -45,6 +49,13 @@ const (
 
 var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
 	"zohomail": providerserver.NewProtocol6WithError(New("test")()),
+}
+
+var testAccExternalProvidersCloudflare = map[string]resource.ExternalProvider{
+	"cloudflare": {
+		Source:            "registry.terraform.io/cloudflare/cloudflare",
+		VersionConstraint: "~> 5.0",
+	},
 }
 
 type testAccMXRecord struct {
@@ -92,6 +103,79 @@ func testAccDNSPreCheck(t *testing.T) {
 	}
 }
 
+func testAccSlowDNSVerificationPreCheck(t *testing.T, verificationKind string) {
+	t.Helper()
+
+	testAccDNSPreCheck(t)
+
+	if testAccBooleanEnv(testAccEnvSlowDNSVerify) {
+		return
+	}
+
+	t.Skipf(
+		"%s acceptance verification requires %s=1 because Zoho can take hours to surface MX, SPF, or DKIM DNS changes",
+		verificationKind,
+		testAccEnvSlowDNSVerify,
+	)
+}
+
+func testAccMultiMailboxPreCheck(t *testing.T, scenario string) {
+	t.Helper()
+
+	testAccDNSPreCheck(t)
+
+	if testAccBooleanEnv(testAccEnvMultiMailbox) {
+		return
+	}
+
+	t.Skipf(
+		"%s acceptance tests require %s=1 because they need multiple Zoho Mail mailbox licenses on the test tenant",
+		scenario,
+		testAccEnvMultiMailbox,
+	)
+}
+
+func testAccMailboxLifecyclePreCheck(t *testing.T, scenario string) {
+	t.Helper()
+
+	testAccDNSPreCheck(t)
+
+	if testAccBooleanEnv(testAccEnvMailboxFlow) {
+		return
+	}
+
+	t.Skipf(
+		"%s acceptance tests require %s=1 because they need at least one spare Zoho Mail mailbox license on the test tenant",
+		scenario,
+		testAccEnvMailboxFlow,
+	)
+}
+
+func testAccAdvancedDomainFeaturePreCheck(t *testing.T, feature string) {
+	t.Helper()
+
+	testAccDNSPreCheck(t)
+
+	if testAccBooleanEnv(testAccEnvAdvancedDomain) {
+		return
+	}
+
+	t.Skipf(
+		"%s acceptance tests require %s=1 because the feature depends on Zoho Mail plan capabilities that are not guaranteed on every tenant",
+		feature,
+		testAccEnvAdvancedDomain,
+	)
+}
+
+func testAccBooleanEnv(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 func testAccZohoClient(t *testing.T) *zohomail.Client {
 	t.Helper()
 
@@ -110,32 +194,12 @@ func testAccZohoClient(t *testing.T) *zohomail.Client {
 func testAccProvidersConfig(includeCloudflare bool) string {
 	if includeCloudflare {
 		return `
-terraform {
-  required_providers {
-    cloudflare = {
-      source  = "cloudflare/cloudflare"
-      version = "~> 5.0"
-    }
-    zohomail = {
-      source = "kefapps/zohomail"
-    }
-  }
-}
-
 provider "cloudflare" {}
 provider "zohomail" {}
 `
 	}
 
 	return `
-terraform {
-  required_providers {
-    zohomail = {
-      source = "kefapps/zohomail"
-    }
-  }
-}
-
 provider "zohomail" {}
 `
 }
@@ -168,15 +232,6 @@ func testAccBaseDomain() string {
 
 func testAccDNSZoneName() string {
 	return strings.TrimSpace(os.Getenv(testAccEnvDNSZoneName))
-}
-
-func testAccDNSVerificationTarget() string {
-	value := strings.TrimSpace(os.Getenv(testAccEnvDNSVerificationTarget))
-	if value == "" {
-		return testAccDefaultDNSVerificationTag
-	}
-
-	return value
 }
 
 func testAccSPFValue() string {
@@ -222,7 +277,11 @@ func testAccDNSTimeout() time.Duration {
 func testAccResolver() *net.Resolver {
 	target := strings.TrimSpace(os.Getenv(testAccEnvDNSResolver))
 	if target == "" {
-		return net.DefaultResolver
+		if strings.EqualFold(strings.TrimSpace(os.Getenv(testAccEnvDNSProvider)), testAccDNSProviderCloudflare) {
+			target = testAccDefaultCloudflareResolver
+		} else {
+			return net.DefaultResolver
+		}
 	}
 
 	return &net.Resolver{
@@ -263,8 +322,11 @@ func testAccWaitForDomainVerificationTXT(t *testing.T, domainName string) {
 	if domain.CNAMEVerificationCode == "" {
 		t.Fatalf("domain %s does not expose a CNAME verification code", domainName)
 	}
+	if domain.TXTVerificationValue == "" {
+		t.Fatalf("domain %s does not expose a TXT verification value", domainName)
+	}
 
-	testAccWaitForTXTRecord(t, domainName, fmt.Sprintf("zoho-verification=%s.%s", domain.CNAMEVerificationCode, testAccDNSVerificationTarget()))
+	testAccWaitForTXTRecord(t, domainName, domain.TXTVerificationValue)
 }
 
 func testAccWaitForDomainSPF(t *testing.T, domainName string) {

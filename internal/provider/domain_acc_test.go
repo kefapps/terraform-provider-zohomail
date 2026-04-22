@@ -40,7 +40,6 @@ func TestAccDomain_basicImport(t *testing.T) {
 			{
 				ResourceName:      resourceName,
 				ImportState:       true,
-				ImportStateKind:   resource.ImportBlockWithID,
 				ImportStateVerify: true,
 			},
 		},
@@ -53,13 +52,21 @@ func TestAccDomainAlias_basicImport(t *testing.T) {
 	resourceName := "zohomail_domain_alias.test"
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck: func() { testAccDomainPreCheck(t) },
+		PreCheck: func() { testAccDNSPreCheck(t) },
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
 		},
+		ExternalProviders:        testAccExternalProvidersCloudflare,
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
+				Config: testAccDomainAliasSetupConfig(primaryDomain, aliasDomain),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForDomainVerificationTXT(t, primaryDomain)
+					testAccWaitForDomainVerificationTXT(t, aliasDomain)
+				},
 				Config: testAccDomainAliasConfig(primaryDomain, aliasDomain),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("id"), knownvalue.StringExact(primaryDomain+":"+aliasDomain)),
@@ -70,7 +77,6 @@ func TestAccDomainAlias_basicImport(t *testing.T) {
 			{
 				ResourceName:      resourceName,
 				ImportState:       true,
-				ImportStateKind:   resource.ImportBlockWithID,
 				ImportStateVerify: true,
 			},
 		},
@@ -87,35 +93,34 @@ func TestAccDomainOnboarding_importAndStateOnlyDelete(t *testing.T) {
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
 		},
+		ExternalProviders:        testAccExternalProvidersCloudflare,
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDomainDNSSetupConfig(domainName, true, true),
+				Config: testAccDomainDNSSetupConfig(domainName, false, false),
 			},
 			{
 				PreConfig: func() {
 					testAccWaitForDomainVerificationTXT(t, domainName)
-					testAccWaitForDomainSPF(t, domainName)
-					testAccWaitForMXRecords(t, domainName, testAccMXRecords())
 				},
-				Config: testAccOnboardedDomainConfig(domainName, true, true, true, true, false, ""),
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(onboardingResourceName, tfjsonpath.New("id"), knownvalue.StringExact(domainName)),
 					statecheck.ExpectKnownValue(onboardingResourceName, tfjsonpath.New("mail_hosting_enabled"), knownvalue.Bool(true)),
 					statecheck.ExpectKnownValue(onboardingResourceName, tfjsonpath.New("verification_status"), knownvalue.NotNull()),
-					statecheck.ExpectKnownValue(onboardingResourceName, tfjsonpath.New("spf_status"), knownvalue.NotNull()),
-					statecheck.ExpectKnownValue(onboardingResourceName, tfjsonpath.New("mx_status"), knownvalue.NotNull()),
 				},
+			},
+			{
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
 			},
 			{
 				ResourceName:            onboardingResourceName,
 				ImportState:             true,
-				ImportStateKind:         resource.ImportBlockWithID,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"verification_method", "enable_mail_hosting", "verify_spf", "verify_mx", "make_primary"},
 			},
 			{
-				Config: testAccDomainDNSSetupConfig(domainName, true, true),
+				Config: testAccDomainDNSSetupConfig(domainName, false, false),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction(onboardingResourceName, plancheck.ResourceActionDestroy),
@@ -130,16 +135,16 @@ func TestAccDomainOnboarding_importAndStateOnlyDelete(t *testing.T) {
 	})
 }
 
-func TestAccDomainDKIM_verifyImport(t *testing.T) {
-	domainName := testAccRandomDomain("dkim")
-	selector := "tf" + testAccRandomDomain("sel")[:8]
-	resourceName := "zohomail_domain_dkim.test"
+func TestAccDomainOnboarding_verifyMXSlow(t *testing.T) {
+	domainName := testAccRandomDomain("onboard-mx")
+	onboardingResourceName := "zohomail_domain_onboarding.test"
 
 	resource.Test(t, resource.TestCase{
-		PreCheck: func() { testAccDNSPreCheck(t) },
+		PreCheck: func() { testAccSlowDNSVerificationPreCheck(t, "MX") },
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
 		},
+		ExternalProviders:        testAccExternalProvidersCloudflare,
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -149,10 +154,85 @@ func TestAccDomainDKIM_verifyImport(t *testing.T) {
 				PreConfig: func() {
 					testAccWaitForDomainVerificationTXT(t, domainName)
 				},
-				Config: testAccOnboardedDomainConfig(domainName, false, false, false, false, false, ""),
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
 			},
 			{
-				Config: testAccOnboardedDomainConfig(domainName, false, false, false, false, false, testAccDomainDKIMBlock(domainName, selector, false, false)),
+				Config: testAccOnboardedDomainConfig(domainName, true, false, true, false, false, ""),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForMXRecords(t, domainName, testAccMXRecords())
+				},
+				Config: testAccOnboardedDomainConfig(domainName, true, false, true, false, true, ""),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(onboardingResourceName, tfjsonpath.New("mx_status"), knownvalue.NotNull()),
+				},
+			},
+		},
+	})
+}
+
+func TestAccDomainOnboarding_verifySPFSlow(t *testing.T) {
+	domainName := testAccRandomDomain("onboard-spf")
+	onboardingResourceName := "zohomail_domain_onboarding.test"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { testAccSlowDNSVerificationPreCheck(t, "SPF") },
+		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
+			tfversion.SkipBelow(tfversion.Version1_5_0),
+		},
+		ExternalProviders:        testAccExternalProvidersCloudflare,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccDomainDNSSetupConfig(domainName, false, false),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForDomainVerificationTXT(t, domainName)
+				},
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
+			},
+			{
+				Config: testAccOnboardedDomainConfig(domainName, false, true, true, false, false, ""),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForDomainSPF(t, domainName)
+				},
+				Config: testAccOnboardedDomainConfig(domainName, false, true, true, true, false, ""),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(onboardingResourceName, tfjsonpath.New("spf_status"), knownvalue.NotNull()),
+				},
+			},
+		},
+	})
+}
+
+func TestAccDomainDKIM_basicImport(t *testing.T) {
+	domainName := testAccRandomDomain("dkim")
+	selector := "tf" + testAccRandomDomain("sel")[:8]
+	resourceName := "zohomail_domain_dkim.test"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { testAccDNSPreCheck(t) },
+		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
+			tfversion.SkipBelow(tfversion.Version1_5_0),
+		},
+		ExternalProviders:        testAccExternalProvidersCloudflare,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccDomainDNSSetupConfig(domainName, false, false),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForDomainVerificationTXT(t, domainName)
+				},
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
+			},
+			{
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, testAccDomainDKIMBlock(domainName, selector, false, false)),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("id"), knownvalue.NotNull()),
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("selector"), knownvalue.StringExact(selector)),
@@ -163,7 +243,7 @@ func TestAccDomainDKIM_verifyImport(t *testing.T) {
 				PreConfig: func() {
 					testAccWaitForDomainDKIMTXT(t, domainName, selector)
 				},
-				Config: testAccOnboardedDomainConfig(domainName, false, false, false, false, false, testAccDomainDKIMBlock(domainName, selector, true, true)),
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, testAccDomainDKIMBlock(domainName, selector, true, false)),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
@@ -171,15 +251,52 @@ func TestAccDomainDKIM_verifyImport(t *testing.T) {
 				},
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("is_default"), knownvalue.Bool(true)),
-					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("is_verified"), knownvalue.Bool(true)),
 				},
 			},
 			{
 				ResourceName:            resourceName,
 				ImportState:             true,
-				ImportStateKind:         resource.ImportBlockWithID,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"hash_type", "make_default", "verify_public_key"},
+			},
+		},
+	})
+}
+
+func TestAccDomainDKIM_verifyPublicKeySlow(t *testing.T) {
+	domainName := testAccRandomDomain("dkim-verify")
+	selector := "tf" + testAccRandomDomain("sel")[:8]
+	resourceName := "zohomail_domain_dkim.test"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() { testAccSlowDNSVerificationPreCheck(t, "DKIM") },
+		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
+			tfversion.SkipBelow(tfversion.Version1_5_0),
+		},
+		ExternalProviders:        testAccExternalProvidersCloudflare,
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccDomainDNSSetupConfig(domainName, false, false),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForDomainVerificationTXT(t, domainName)
+				},
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
+			},
+			{
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, testAccDomainDKIMBlock(domainName, selector, true, false)),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForDomainDKIMTXT(t, domainName, selector)
+				},
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, testAccDomainDKIMBlock(domainName, selector, true, true)),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("is_default"), knownvalue.Bool(true)),
+					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("is_verified"), knownvalue.Bool(true)),
+				},
 			},
 		},
 	})
@@ -192,31 +309,33 @@ func TestAccDomainCatchAll_basicImportDrift(t *testing.T) {
 	resourceName := "zohomail_domain_catch_all.test"
 
 	resource.Test(t, resource.TestCase{
-		PreCheck: func() { testAccDNSPreCheck(t) },
+		PreCheck: func() {
+			testAccAdvancedDomainFeaturePreCheck(t, "Catch-all")
+			testAccMultiMailboxPreCheck(t, "Catch-all")
+		},
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
 		},
+		ExternalProviders:        testAccExternalProvidersCloudflare,
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccDomainDNSSetupConfig(domainName, true, true),
+				Config: testAccDomainDNSSetupConfig(domainName, false, false),
 			},
 			{
 				PreConfig: func() {
 					testAccWaitForDomainVerificationTXT(t, domainName)
-					testAccWaitForDomainSPF(t, domainName)
-					testAccWaitForMXRecords(t, domainName, testAccMXRecords())
 				},
-				Config: testAccOnboardedDomainConfig(domainName, true, true, true, true, false, ""),
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, ""),
 			},
 			{
-				Config: testAccOnboardedDomainConfig(domainName, true, true, true, true, false, testAccDomainCatchAllBlock(supportEmail, helloEmail, domainName, supportEmail)),
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, testAccDomainCatchAllBlock(supportEmail, helloEmail, domainName, supportEmail)),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("catch_all_address"), knownvalue.StringExact(supportEmail)),
 				},
 			},
 			{
-				Config: testAccOnboardedDomainConfig(domainName, true, true, true, true, false, testAccDomainCatchAllBlock(supportEmail, helloEmail, domainName, helloEmail)),
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, testAccDomainCatchAllBlock(supportEmail, helloEmail, domainName, helloEmail)),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionUpdate),
@@ -229,7 +348,6 @@ func TestAccDomainCatchAll_basicImportDrift(t *testing.T) {
 			{
 				ResourceName:      resourceName,
 				ImportState:       true,
-				ImportStateKind:   resource.ImportBlockWithID,
 				ImportStateVerify: true,
 			},
 			{
@@ -238,7 +356,7 @@ func TestAccDomainCatchAll_basicImportDrift(t *testing.T) {
 						t.Fatalf("delete catch-all remotely: %v", err)
 					}
 				},
-				Config: testAccOnboardedDomainConfig(domainName, true, true, true, true, false, testAccDomainCatchAllBlock(supportEmail, helloEmail, domainName, helloEmail)),
+				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, testAccDomainCatchAllBlock(supportEmail, helloEmail, domainName, helloEmail)),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction(resourceName, plancheck.ResourceActionCreate),
@@ -258,10 +376,11 @@ func TestAccDomainSubdomainStripping_basicImportDelete(t *testing.T) {
 	domainResourceName := "zohomail_domain.test"
 
 	resource.Test(t, resource.TestCase{
-		PreCheck: func() { testAccDNSPreCheck(t) },
+		PreCheck: func() { testAccAdvancedDomainFeaturePreCheck(t, "Subdomain stripping") },
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
 		},
+		ExternalProviders:        testAccExternalProvidersCloudflare,
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
@@ -282,7 +401,6 @@ func TestAccDomainSubdomainStripping_basicImportDelete(t *testing.T) {
 			{
 				ResourceName:      resourceName,
 				ImportState:       true,
-				ImportStateKind:   resource.ImportBlockWithID,
 				ImportStateVerify: true,
 			},
 			{
@@ -314,8 +432,48 @@ func testAccDomainAliasConfig(primaryDomain string, aliasDomain string) string {
 	return fmt.Sprintf(`
 %[1]s
 
+%[4]s
+
 resource "zohomail_domain" "primary" {
   domain_name = %[2]q
+}
+
+resource "cloudflare_dns_record" "primary_verification" {
+  zone_id = local.zone_id
+  name    = %[2]q
+  type    = "TXT"
+  content = zohomail_domain.primary.txt_verification_value
+  ttl     = %[5]d
+}
+
+resource "cloudflare_dns_record" "alias_verification" {
+  zone_id = local.zone_id
+  name    = %[3]q
+  type    = "TXT"
+  content = zohomail_domain.alias.txt_verification_value
+  ttl     = %[5]d
+}
+
+%[6]s
+
+resource "zohomail_domain_onboarding" "primary" {
+  depends_on          = [%[7]s]
+  domain_name         = zohomail_domain.primary.domain_name
+  verification_method = "txt"
+  enable_mail_hosting = true
+  verify_spf          = false
+  verify_mx           = false
+  make_primary        = false
+}
+
+resource "zohomail_domain_onboarding" "alias" {
+  depends_on          = [%[8]s]
+  domain_name         = zohomail_domain.alias.domain_name
+  verification_method = "txt"
+  enable_mail_hosting = false
+  verify_spf          = false
+  verify_mx           = false
+  make_primary        = false
 }
 
 resource "zohomail_domain" "alias" {
@@ -323,10 +481,82 @@ resource "zohomail_domain" "alias" {
 }
 
 resource "zohomail_domain_alias" "test" {
+  depends_on     = [zohomail_domain_onboarding.primary, zohomail_domain_onboarding.alias]
   primary_domain = zohomail_domain.primary.domain_name
   alias_domain   = zohomail_domain.alias.domain_name
 }
-`, testAccProvidersConfig(false), primaryDomain, aliasDomain)
+`, testAccProvidersConfig(true), primaryDomain, aliasDomain, testAccCloudflareZoneDataConfig(), testAccDefaultDNSVerificationTTL, testAccDualDomainMXBlocks(primaryDomain, aliasDomain), testAccDualDomainDependsOn("primary_verification", "primary_mx"), testAccDualDomainDependsOn("alias_verification", "alias_mx"))
+}
+
+func testAccDomainAliasSetupConfig(primaryDomain string, aliasDomain string) string {
+	return fmt.Sprintf(`
+%[1]s
+
+%[4]s
+
+resource "zohomail_domain" "primary" {
+  domain_name = %[2]q
+}
+
+resource "cloudflare_dns_record" "primary_verification" {
+  zone_id = local.zone_id
+  name    = %[2]q
+  type    = "TXT"
+  content = zohomail_domain.primary.txt_verification_value
+  ttl     = %[5]d
+}
+
+resource "zohomail_domain" "alias" {
+  domain_name = %[3]q
+}
+
+resource "cloudflare_dns_record" "alias_verification" {
+  zone_id = local.zone_id
+  name    = %[3]q
+  type    = "TXT"
+  content = zohomail_domain.alias.txt_verification_value
+  ttl     = %[5]d
+}
+
+%[6]s
+`, testAccProvidersConfig(true), primaryDomain, aliasDomain, testAccCloudflareZoneDataConfig(), testAccDefaultDNSVerificationTTL, testAccDualDomainMXBlocks(primaryDomain, aliasDomain))
+}
+
+func testAccDualDomainMXBlocks(primaryDomain string, aliasDomain string) string {
+	blocks := make([]string, 0, len(testAccMXRecords())*2)
+	for idx, record := range testAccMXRecords() {
+		blocks = append(blocks, fmt.Sprintf(`
+resource "cloudflare_dns_record" "primary_mx_%d" {
+  zone_id  = local.zone_id
+  name     = %q
+  type     = "MX"
+  content  = %q
+  priority = %d
+  ttl      = %d
+}
+`, idx, primaryDomain, record.Host, record.Priority, testAccDefaultDNSVerificationTTL))
+		blocks = append(blocks, fmt.Sprintf(`
+resource "cloudflare_dns_record" "alias_mx_%d" {
+  zone_id  = local.zone_id
+  name     = %q
+  type     = "MX"
+  content  = %q
+  priority = %d
+  ttl      = %d
+}
+`, idx, aliasDomain, record.Host, record.Priority, testAccDefaultDNSVerificationTTL))
+	}
+
+	return strings.Join(blocks, "\n")
+}
+
+func testAccDualDomainDependsOn(verification string, mxPrefix string) string {
+	dependsOn := []string{fmt.Sprintf("cloudflare_dns_record.%s", verification)}
+	for idx := range testAccMXRecords() {
+		dependsOn = append(dependsOn, fmt.Sprintf("cloudflare_dns_record.%s_%d", mxPrefix, idx))
+	}
+
+	return strings.Join(dependsOn, ", ")
 }
 
 func testAccDomainDNSSetupConfig(domainName string, includeMX bool, includeSPF bool) string {
@@ -342,10 +572,10 @@ resource "cloudflare_dns_record" "verification" {
   zone_id = local.zone_id
   name    = %q
   type    = "TXT"
-  content = "zoho-verification=${zohomail_domain.test.cname_verification_code}.%s"
+  content = zohomail_domain.test.txt_verification_value
   ttl     = %d
 }
-`, domainName, domainName, testAccDNSVerificationTarget(), testAccDefaultDNSVerificationTTL),
+`, domainName, domainName, testAccDefaultDNSVerificationTTL),
 	}
 
 	if includeSPF {
@@ -379,10 +609,21 @@ resource "cloudflare_dns_record" "mx_%d" {
 }
 
 func testAccOnboardedDomainConfig(domainName string, includeMX bool, includeSPF bool, enableMailHosting bool, verifySPF bool, verifyMX bool, extra string) string {
+	dependsOn := []string{"cloudflare_dns_record.verification"}
+	if includeSPF {
+		dependsOn = append(dependsOn, "cloudflare_dns_record.spf")
+	}
+	if includeMX {
+		for idx := range testAccMXRecords() {
+			dependsOn = append(dependsOn, fmt.Sprintf("cloudflare_dns_record.mx_%d", idx))
+		}
+	}
+
 	return fmt.Sprintf(`
 %[1]s
 
 resource "zohomail_domain_onboarding" "test" {
+  depends_on          = [%[6]s]
   domain_name         = zohomail_domain.test.domain_name
   verification_method = "txt"
   enable_mail_hosting = %[2]t
@@ -392,7 +633,7 @@ resource "zohomail_domain_onboarding" "test" {
 }
 
 %[5]s
-`, testAccDomainDNSSetupConfig(domainName, includeMX, includeSPF), enableMailHosting, verifySPF, verifyMX, extra)
+`, testAccDomainDNSSetupConfig(domainName, includeMX, includeSPF), enableMailHosting, verifySPF, verifyMX, extra, strings.Join(dependsOn, ", "))
 }
 
 func testAccDomainDKIMBlock(domainName string, selector string, makeDefault bool, verifyPublicKey bool) string {

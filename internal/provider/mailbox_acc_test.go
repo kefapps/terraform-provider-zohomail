@@ -18,19 +18,33 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/tfversion"
 )
 
+const (
+	testAccMailboxCountry         = "in"
+	testAccMailboxInitialPassword = "KefjboTfacc!20260422"
+	testAccMailboxLanguage        = "En"
+	testAccMailboxTimeZone        = "Asia/Kolkata"
+)
+
 func TestAccMailbox_basicImportUpdateReplace(t *testing.T) {
 	domainName := testAccRandomDomain("mailbox")
 	primaryEmail := testAccRandomEmail("support", domainName)
 	resourceName := "zohomail_mailbox.test"
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck: func() { testAccDomainPreCheck(t) },
+		PreCheck: func() { testAccMailboxLifecyclePreCheck(t, "Mailbox") },
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		ExternalProviders:        testAccExternalProvidersCloudflare,
 		Steps: []resource.TestStep{
 			{
+				Config: testAccDomainDNSSetupConfig(domainName, false, false),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForDomainVerificationTXT(t, domainName)
+				},
 				Config: testAccMailboxConfig(domainName, primaryEmail, "Support", "member", false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("id"), knownvalue.NotNull()),
@@ -58,7 +72,6 @@ func TestAccMailbox_basicImportUpdateReplace(t *testing.T) {
 			{
 				ResourceName:            resourceName,
 				ImportState:             true,
-				ImportStateKind:         resource.ImportBlockWithID,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"initial_password", "one_time_password"},
 			},
@@ -77,7 +90,6 @@ func TestAccMailbox_basicImportUpdateReplace(t *testing.T) {
 			{
 				ResourceName:            resourceName,
 				ImportState:             true,
-				ImportStateKind:         resource.ImportBlockWithID,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"initial_password", "one_time_password"},
 			},
@@ -95,13 +107,20 @@ func TestAccMailboxAlias_basicImportDrift(t *testing.T) {
 	var mailboxID string
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck: func() { testAccDomainPreCheck(t) },
+		PreCheck: func() { testAccMailboxLifecyclePreCheck(t, "Mailbox alias") },
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		ExternalProviders:        testAccExternalProvidersCloudflare,
 		Steps: []resource.TestStep{
 			{
+				Config: testAccDomainDNSSetupConfig(domainName, false, false),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForDomainVerificationTXT(t, domainName)
+				},
 				Config: testAccMailboxAliasConfig(domainName, mailboxEmail, aliasEmail),
 				ConfigStateChecks: []statecheck.StateCheck{
 					testAccCaptureStringValue(mailboxResourceName, tfjsonpath.New("id"), &mailboxID),
@@ -113,7 +132,6 @@ func TestAccMailboxAlias_basicImportDrift(t *testing.T) {
 			{
 				ResourceName:      aliasResourceName,
 				ImportState:       true,
-				ImportStateKind:   resource.ImportBlockWithID,
 				ImportStateVerify: true,
 			},
 			{
@@ -149,13 +167,20 @@ func TestAccMailboxForwarding_basicImportUpdate(t *testing.T) {
 	resourceName := "zohomail_mailbox_forwarding.test"
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck: func() { testAccDomainPreCheck(t) },
+		PreCheck: func() { testAccMultiMailboxPreCheck(t, "Mailbox forwarding") },
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
 		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		ExternalProviders:        testAccExternalProvidersCloudflare,
 		Steps: []resource.TestStep{
 			{
+				Config: testAccDomainDNSSetupConfig(domainName, false, false),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForDomainVerificationTXT(t, domainName)
+				},
 				Config: testAccMailboxForwardingConfig(domainName, sourceEmail, salesEmail, helloEmail, []string{salesEmail, helloEmail}, false),
 				ConfigStateChecks: []statecheck.StateCheck{
 					statecheck.ExpectKnownValue(resourceName, tfjsonpath.New("id"), knownvalue.NotNull()),
@@ -184,7 +209,6 @@ func TestAccMailboxForwarding_basicImportUpdate(t *testing.T) {
 			{
 				ResourceName:      resourceName,
 				ImportState:       true,
-				ImportStateKind:   resource.ImportBlockWithID,
 				ImportStateVerify: true,
 			},
 		},
@@ -194,14 +218,20 @@ func TestAccMailboxForwarding_basicImportUpdate(t *testing.T) {
 func TestAccMailboxForwarding_rejectExternalDomains(t *testing.T) {
 	domainName := testAccRandomDomain("forwarderr")
 	sourceEmail := testAccRandomEmail("support", domainName)
-	salesEmail := testAccRandomEmail("sales", domainName)
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccDomainPreCheck(t) },
+		PreCheck:                 func() { testAccMailboxLifecyclePreCheck(t, "Mailbox forwarding") },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		ExternalProviders:        testAccExternalProvidersCloudflare,
 		Steps: []resource.TestStep{
 			{
-				Config:      testAccMailboxForwardingConfig(domainName, sourceEmail, salesEmail, "", []string{salesEmail, "outside@example.net"}, false),
+				Config: testAccDomainDNSSetupConfig(domainName, false, false),
+			},
+			{
+				PreConfig: func() {
+					testAccWaitForDomainVerificationTXT(t, domainName)
+				},
+				Config:      testAccMailboxForwardingConfig(domainName, sourceEmail, "", "", []string{"outside@example.net"}, false),
 				ExpectError: regexp.MustCompile(`Unsupported forwarding target`),
 			},
 		},
@@ -219,95 +249,82 @@ func TestTestAccMailboxEmailExpression(t *testing.T) {
 }
 
 func testAccMailboxConfig(domainName string, primaryEmail string, displayName string, role string, oneTimePassword bool) string {
-	return fmt.Sprintf(`
-%[1]s
-
-resource "zohomail_domain" "test" {
-  domain_name = %[2]q
-}
-
+	return testAccMailboxDomainConfig(domainName, fmt.Sprintf(`
 resource "zohomail_mailbox" "test" {
-  primary_email_address = %[3]s
-  initial_password      = "Initial-passw0rd!"
+  depends_on            = [zohomail_domain_onboarding.test]
+  primary_email_address = %[1]s
+  initial_password      = %[5]q
   first_name            = "Support"
   last_name             = "Team"
-  display_name          = %[4]q
-  role                  = %[5]q
-  country               = "FR"
-  language              = "fr"
-  time_zone             = "Europe/Paris"
-  one_time_password     = %[6]t
+  display_name          = %[2]q
+  role                  = %[3]q
+  country               = %[6]q
+  language              = %[7]q
+  time_zone             = %[8]q
+  one_time_password     = %[4]t
 }
-`, testAccProvidersConfig(false), domainName, testAccMailboxEmailExpression(primaryEmail), displayName, role, oneTimePassword)
+`, testAccMailboxEmailExpression(primaryEmail), displayName, role, oneTimePassword, testAccMailboxInitialPassword, testAccMailboxCountry, testAccMailboxLanguage, testAccMailboxTimeZone))
 }
 
 func testAccMailboxAliasConfig(domainName string, mailboxEmail string, aliasEmail string) string {
-	return fmt.Sprintf(`
-%[1]s
-
-resource "zohomail_domain" "test" {
-  domain_name = %[2]q
-}
-
+	return testAccMailboxDomainConfig(domainName, fmt.Sprintf(`
 resource "zohomail_mailbox" "test" {
-  primary_email_address = %[3]s
-  initial_password      = "Initial-passw0rd!"
+  depends_on            = [zohomail_domain_onboarding.test]
+  primary_email_address = %[1]s
+  initial_password      = %[3]q
   first_name            = "Support"
   last_name             = "Team"
   display_name          = "Support"
   role                  = "member"
-  country               = "FR"
-  language              = "fr"
-  time_zone             = "Europe/Paris"
+  country               = %[4]q
+  language              = %[5]q
+  time_zone             = %[6]q
 }
 
 resource "zohomail_mailbox_alias" "test" {
   mailbox_id  = zohomail_mailbox.test.id
-  email_alias = %[4]q
+  email_alias = %[2]q
 }
-`, testAccProvidersConfig(false), domainName, testAccMailboxEmailExpression(mailboxEmail), aliasEmail)
+`, testAccMailboxEmailExpression(mailboxEmail), aliasEmail, testAccMailboxInitialPassword, testAccMailboxCountry, testAccMailboxLanguage, testAccMailboxTimeZone))
 }
 
 func testAccMailboxForwardingConfig(domainName string, sourceEmail string, salesEmail string, helloEmail string, targets []string, deleteCopy bool) string {
 	mailboxes := []string{
 		testAccMailboxResourceBlock("support", sourceEmail, "Support"),
-		testAccMailboxResourceBlock("sales", salesEmail, "Sales"),
+	}
+	if salesEmail != "" {
+		mailboxes = append(mailboxes, testAccMailboxResourceBlock("sales", salesEmail, "Sales"))
 	}
 	if helloEmail != "" {
 		mailboxes = append(mailboxes, testAccMailboxResourceBlock("hello", helloEmail, "Hello"))
 	}
 
-	return fmt.Sprintf(`
+	return testAccMailboxDomainConfig(domainName, fmt.Sprintf(`
 %[1]s
-
-resource "zohomail_domain" "test" {
-  domain_name = %[2]q
-}
-
-%[3]s
 
 resource "zohomail_mailbox_forwarding" "test" {
   mailbox_id             = zohomail_mailbox.support.id
-  target_addresses       = %[4]s
-  delete_zoho_mail_copy  = %[5]t
+  target_addresses       = %[2]s
+  delete_zoho_mail_copy  = %[3]t
 }
-`, testAccProvidersConfig(false), domainName, strings.Join(mailboxes, "\n"), testAccHCLStringList(targets), deleteCopy)
+`, strings.Join(mailboxes, "\n"), testAccHCLStringList(targets), deleteCopy))
 }
 
 func testAccMailboxResourceBlock(name string, email string, displayName string) string {
 	return fmt.Sprintf(`
 resource "zohomail_mailbox" %q {
+  depends_on            = [zohomail_domain_onboarding.test]
   primary_email_address = %s
-  initial_password      = "Initial-passw0rd!"
+  initial_password      = %q
   first_name            = %q
   last_name             = "Team"
   display_name          = %q
   role                  = "member"
-  country               = "FR"
-  language              = "fr"
-  time_zone             = "Europe/Paris"
+  country               = %q
+  language              = %q
+  time_zone             = %q
 }
-`, name, testAccMailboxEmailExpression(email), displayName, displayName)
+`, name, testAccMailboxEmailExpression(email), testAccMailboxInitialPassword, displayName, displayName, testAccMailboxCountry, testAccMailboxLanguage, testAccMailboxTimeZone)
 }
 
 func testAccMailboxEmailExpression(email string) string {
@@ -317,6 +334,10 @@ func testAccMailboxEmailExpression(email string) string {
 	}
 
 	return fmt.Sprintf("%q", parts[0]+"@${zohomail_domain.test.domain_name}")
+}
+
+func testAccMailboxDomainConfig(domainName string, extra string) string {
+	return testAccOnboardedDomainConfig(domainName, false, false, true, false, false, extra)
 }
 
 func testAccHCLStringList(values []string) string {

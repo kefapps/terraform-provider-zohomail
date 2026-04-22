@@ -80,11 +80,11 @@ func (r *domainOnboardingResource) Schema(_ context.Context, _ resource.SchemaRe
 			},
 			"verify_spf": schema.BoolAttribute{
 				Optional:            true,
-				MarkdownDescription: "Ask Zoho Mail to verify the SPF DNS record.",
+				MarkdownDescription: "Ask Zoho Mail to verify the SPF DNS record. Zoho can surface SPF propagation asynchronously, so this flag may need a later apply after DNS has settled.",
 			},
 			"verify_mx": schema.BoolAttribute{
 				Optional:            true,
-				MarkdownDescription: "Ask Zoho Mail to verify MX records.",
+				MarkdownDescription: "Ask Zoho Mail to verify MX records. Zoho can surface MX propagation asynchronously, so this flag may need a later apply after DNS has settled.",
 			},
 			"make_primary": schema.BoolAttribute{
 				Optional:            true,
@@ -178,9 +178,18 @@ func (r *domainOnboardingResource) ImportState(ctx context.Context, req resource
 
 func (r *domainOnboardingResource) applyOnboarding(ctx context.Context, plan domainOnboardingResourceModel, diags *diag.Diagnostics) domainOnboardingResourceModel {
 	method := strings.ToLower(plan.VerificationMethod.ValueString())
-	if err := r.client.VerifyDomain(ctx, plan.DomainName.ValueString(), method); err != nil {
-		diags.AddError("Unable to verify Zoho Mail domain", err.Error())
+
+	domain, err := r.client.GetDomain(ctx, plan.DomainName.ValueString())
+	if err != nil {
+		diags.AddError("Unable to load Zoho Mail domain before onboarding", err.Error())
 		return domainOnboardingResourceModel{}
+	}
+
+	if !domainVerificationComplete(domain) {
+		if err := r.client.VerifyDomain(ctx, plan.DomainName.ValueString(), method); err != nil {
+			diags.AddError("Unable to verify Zoho Mail domain", err.Error())
+			return domainOnboardingResourceModel{}
+		}
 	}
 
 	if valueBool(plan.EnableMailHosting) {
@@ -211,7 +220,7 @@ func (r *domainOnboardingResource) applyOnboarding(ctx context.Context, plan dom
 		}
 	}
 
-	domain, err := r.client.GetDomain(ctx, plan.DomainName.ValueString())
+	domain, err = r.client.GetDomain(ctx, plan.DomainName.ValueString())
 	if err != nil {
 		diags.AddError("Unable to refresh Zoho Mail domain onboarding", err.Error())
 		return domainOnboardingResourceModel{}
@@ -239,4 +248,9 @@ func domainOnboardingStateFromRemote(current domainOnboardingResourceModel, remo
 
 func valueBool(value types.Bool) bool {
 	return !value.IsNull() && !value.IsUnknown() && value.ValueBool()
+}
+
+func domainVerificationComplete(domain *zohomail.Domain) bool {
+	status := strings.ToLower(strings.TrimSpace(domain.VerificationStatus))
+	return status == "true" || status == "verified" || status == "success"
 }
