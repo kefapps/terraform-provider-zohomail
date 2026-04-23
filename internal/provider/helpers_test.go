@@ -176,6 +176,27 @@ func TestMailboxStateFromRemoteUsesRemoteCreateOnlyFields(t *testing.T) {
 	}
 }
 
+func TestMailboxStateFromRemotePreservesConfiguredRoleWhenRemoteOmitsIt(t *testing.T) {
+	t.Parallel()
+
+	state, diags := mailboxStateFromRemote(context.Background(), mailboxResourceModel{
+		Role: types.StringValue("member"),
+	}, &zohomail.Mailbox{
+		AccountID:      "acc-1",
+		DisplayName:    "Support",
+		MailboxAddress: "support@example.com",
+		MailboxStatus:  "active",
+		ZUID:           "z-1",
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+
+	if got := state.Role.ValueString(); got != "member" {
+		t.Fatalf("expected role fallback to preserve configured value, got %q", got)
+	}
+}
+
 func TestResolvedCatchAllAddress(t *testing.T) {
 	t.Parallel()
 

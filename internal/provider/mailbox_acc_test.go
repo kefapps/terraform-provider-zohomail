@@ -21,7 +21,7 @@ import (
 const (
 	testAccMailboxCountry         = "in"
 	testAccMailboxInitialPassword = "KefjboTfacc!20260422"
-	testAccMailboxLanguage        = "En"
+	testAccMailboxLanguage        = "en"
 	testAccMailboxTimeZone        = "Asia/Kolkata"
 )
 
@@ -30,7 +30,7 @@ func TestAccMailbox_basicImportUpdateReplace(t *testing.T) {
 	primaryEmail := testAccRandomEmail("support", domainName)
 	resourceName := "zohomail_mailbox.test"
 
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck: func() { testAccMailboxLifecyclePreCheck(t, "Mailbox") },
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
@@ -112,7 +112,7 @@ func TestAccMailboxAlias_basicImportDrift(t *testing.T) {
 
 	var mailboxID string
 
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck: func() { testAccMailboxLifecyclePreCheck(t, "Mailbox alias") },
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
@@ -178,7 +178,7 @@ func TestAccMailboxForwarding_basicImportUpdate(t *testing.T) {
 	helloEmail := testAccRandomEmail("hello", domainName)
 	resourceName := "zohomail_mailbox_forwarding.test"
 
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck: func() { testAccMultiMailboxPreCheck(t, "Mailbox forwarding") },
 		TerraformVersionChecks: []tfversion.TerraformVersionCheck{
 			tfversion.SkipBelow(tfversion.Version1_5_0),
@@ -237,7 +237,7 @@ func TestAccMailboxForwarding_rejectExternalDomains(t *testing.T) {
 	domainName := testAccRandomDomain("forwarderr")
 	sourceEmail := testAccRandomEmail("support", domainName)
 
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccMailboxLifecyclePreCheck(t, "Mailbox forwarding") },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		ExternalProviders:        testAccExternalProvidersCloudflare,

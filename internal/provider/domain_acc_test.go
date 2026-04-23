@@ -330,7 +330,7 @@ func TestAccDomainCatchAll_basicImportDrift(t *testing.T) {
 			},
 			{
 				PreConfig: func() {
-					testAccRequireCatchAllCapability(t, domainName)
+					testAccRequireCatchAllCapability(t, domainName, 2)
 				},
 				Config: testAccOnboardedDomainConfig(domainName, false, false, true, false, false, testAccDomainCatchAllBlock(supportEmail, helloEmail, domainName, supportEmail)),
 				ConfigStateChecks: []statecheck.StateCheck{
