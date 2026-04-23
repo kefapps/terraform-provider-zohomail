@@ -5,6 +5,9 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -16,6 +19,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/kefapps/terraform-provider-zohomail/internal/zohomail"
+)
+
+const (
+	mailboxUpdateRefreshTimeout = 30 * time.Second
+	mailboxUpdateRefreshDelay   = 2 * time.Second
 )
 
 var (
@@ -253,7 +261,7 @@ func (r *mailboxResource) Update(ctx context.Context, req resource.UpdateRequest
 		}
 	}
 
-	remote, err := r.client.GetMailbox(ctx, state.ID.ValueString())
+	remote, err := r.waitForUpdatedMailbox(ctx, state, plan)
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to refresh mailbox after update", err.Error())
 		return
@@ -266,6 +274,41 @@ func (r *mailboxResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &nextState)...)
+}
+
+func (r *mailboxResource) waitForUpdatedMailbox(ctx context.Context, state mailboxResourceModel, plan mailboxResourceModel) (*zohomail.Mailbox, error) {
+	deadline := time.Now().Add(mailboxUpdateRefreshTimeout)
+
+	for {
+		remote, err := r.client.GetMailbox(ctx, state.ID.ValueString())
+		if err != nil {
+			return nil, err
+		}
+
+		if mailboxMatchesPlanAfterUpdate(state, plan, remote) {
+			return remote, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("zoho mailbox update still not reflected after %s", mailboxUpdateRefreshTimeout)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(mailboxUpdateRefreshDelay):
+		}
+	}
+}
+
+func mailboxMatchesPlanAfterUpdate(state mailboxResourceModel, plan mailboxResourceModel, remote *zohomail.Mailbox) bool {
+	if plan.DisplayName.ValueString() != state.DisplayName.ValueString() && remote.DisplayName != plan.DisplayName.ValueString() {
+		return false
+	}
+	if plan.Role.ValueString() != state.Role.ValueString() && remote.Role != "" && remote.Role != plan.Role.ValueString() {
+		return false
+	}
+
+	return true
 }
 
 func (r *mailboxResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -294,7 +337,7 @@ func mailboxStateFromRemote(ctx context.Context, current mailboxResourceModel, r
 	return mailboxResourceModel{
 		AccountID:           types.StringValue(remote.AccountID),
 		Country:             stringValueFromRemoteOrCurrent(remote.Country, current.Country),
-		DisplayName:         types.StringValue(remote.DisplayName),
+		DisplayName:         resolvedMailboxDisplayName(remote.DisplayName, current.DisplayName),
 		EmailAddresses:      emailAddresses,
 		FirstName:           stringValueFromRemoteOrCurrent(remote.FirstName, current.FirstName),
 		ID:                  types.StringValue(remote.ZUID),
@@ -315,4 +358,20 @@ func stringValueFromRemoteOrCurrent(remote string, current types.String) types.S
 	}
 
 	return current
+}
+
+func resolvedMailboxDisplayName(remote string, current types.String) types.String {
+	trimmedRemote := strings.TrimSpace(remote)
+	if current.IsNull() || current.IsUnknown() {
+		if trimmedRemote != "" {
+			return types.StringValue(trimmedRemote)
+		}
+
+		return current
+	}
+	if trimmedRemote == "" || trimmedRemote != current.ValueString() {
+		return current
+	}
+
+	return types.StringValue(trimmedRemote)
 }

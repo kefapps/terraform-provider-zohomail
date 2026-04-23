@@ -189,3 +189,17 @@ func TestConvertMailboxPreservesExactNumericIdentifiers(t *testing.T) {
 		t.Fatalf("unexpected zuid: %q", mailbox.ZUID)
 	}
 }
+
+func TestConvertMailboxFallsBackToRoleField(t *testing.T) {
+	t.Parallel()
+
+	var raw mailboxResponse
+	if err := json.Unmarshal([]byte(`{"role":"admin"}`), &raw); err != nil {
+		t.Fatalf("unexpected mailbox json decode error: %v", err)
+	}
+
+	mailbox := convertMailbox(raw)
+	if mailbox.Role != "admin" {
+		t.Fatalf("unexpected role fallback: %q", mailbox.Role)
+	}
+}
