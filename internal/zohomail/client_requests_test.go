@@ -85,7 +85,7 @@ func TestClientMailboxAccountRequests(t *testing.T) {
 			name:             "UpdateMailboxDisplayName",
 			method:           http.MethodPut,
 			path:             "/api/organization/org/accounts/2002",
-			wantBodyContains: `"mode":"displaynameemailupdate"`,
+			wantBodyContains: `"mode":"updatePersonalInfo"`,
 			responseBody:     `{"status":{"code":200},"data":null}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()
@@ -104,7 +104,7 @@ func TestClientMailboxAccountRequests(t *testing.T) {
 			name:             "ChangeMailboxRole",
 			method:           http.MethodPut,
 			path:             testOrgAccountsPath,
-			wantBodyContains: `"mode":"changeRole"`,
+			wantBodyContains: `"role":"admin"`,
 			responseBody:     `{"status":{"code":200},"data":null}`,
 			run: func(t *testing.T, client *Client) {
 				t.Helper()

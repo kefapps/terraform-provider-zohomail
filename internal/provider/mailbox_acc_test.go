@@ -79,9 +79,12 @@ func TestAccMailbox_basicImportUpdateReplace(t *testing.T) {
 				ResourceName:            resourceName,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"initial_password", "one_time_password"},
+				ImportStateVerifyIgnore: []string{"display_name", "initial_password", "one_time_password"},
 			},
 			{
+				PreConfig: func() {
+					testAccRequireMailboxCapacity(t, "Mailbox replacement", domainName, 1)
+				},
 				Config: testAccMailboxConfig(domainName, primaryEmail, "Support Team", "admin", true),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
@@ -97,7 +100,7 @@ func TestAccMailbox_basicImportUpdateReplace(t *testing.T) {
 				ResourceName:            resourceName,
 				ImportState:             true,
 				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"initial_password", "one_time_password"},
+				ImportStateVerifyIgnore: []string{"display_name", "initial_password", "one_time_password"},
 			},
 		},
 	})

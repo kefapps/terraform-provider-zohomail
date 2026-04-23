@@ -197,6 +197,27 @@ func TestMailboxStateFromRemotePreservesConfiguredRoleWhenRemoteOmitsIt(t *testi
 	}
 }
 
+func TestMailboxStateFromRemotePreservesConfiguredDisplayNameWhenRemoteDiffers(t *testing.T) {
+	t.Parallel()
+
+	state, diags := mailboxStateFromRemote(context.Background(), mailboxResourceModel{
+		DisplayName: types.StringValue("Support Team"),
+	}, &zohomail.Mailbox{
+		AccountID:      "acc-1",
+		DisplayName:    "Support",
+		MailboxAddress: "support@example.com",
+		MailboxStatus:  "active",
+		ZUID:           "z-1",
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+
+	if got := state.DisplayName.ValueString(); got != "Support Team" {
+		t.Fatalf("expected display_name fallback to preserve configured value, got %q", got)
+	}
+}
+
 func TestResolvedCatchAllAddress(t *testing.T) {
 	t.Parallel()
 

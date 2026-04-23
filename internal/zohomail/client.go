@@ -186,6 +186,7 @@ type mailboxResponse struct {
 	MailBoxStatus   string          `json:"mailboxStatus"`
 	MailForward     json.RawMessage `json:"mailForward"`
 	Role            string          `json:"roleName"`
+	RoleFallback    string          `json:"role"`
 	SendMailDetails json.RawMessage `json:"sendMailDetails"`
 	TimeZone        string          `json:"timeZone"`
 	ZUID            exactString     `json:"zuid"`
@@ -402,10 +403,9 @@ func (c *Client) GetMailbox(ctx context.Context, zuid string) (*Mailbox, error) 
 
 func (c *Client) UpdateMailboxDisplayName(ctx context.Context, mailbox *Mailbox, displayName string) error {
 	payload := map[string]any{
-		"displayName":  displayName,
-		"emailAddress": mailbox.MailboxAddress,
-		"mode":         "displaynameemailupdate",
-		"zuid":         mailbox.ZUID,
+		"displayName": displayName,
+		"mode":        "updatePersonalInfo",
+		"zuid":        mailbox.ZUID,
 	}
 
 	return c.doJSON(ctx, http.MethodPut, c.orgPath("accounts", mailbox.AccountID), payload, nil)
@@ -414,7 +414,7 @@ func (c *Client) UpdateMailboxDisplayName(ctx context.Context, mailbox *Mailbox,
 func (c *Client) ChangeMailboxRole(ctx context.Context, zuid string, roleName string) error {
 	payload := map[string]any{
 		"mode":     "changeRole",
-		"roleName": roleName,
+		"role":     roleName,
 		"userList": []string{zuid},
 	}
 
@@ -1008,6 +1008,11 @@ func apiPath(parts ...string) string {
 }
 
 func convertMailbox(raw mailboxResponse) *Mailbox {
+	role := strings.TrimSpace(raw.Role)
+	if role == "" {
+		role = strings.TrimSpace(raw.RoleFallback)
+	}
+
 	result := &Mailbox{
 		AccountID:      strings.TrimSpace(string(raw.AccountID)),
 		Country:        strings.TrimSpace(raw.Country),
@@ -1017,7 +1022,7 @@ func convertMailbox(raw mailboxResponse) *Mailbox {
 		LastName:       strings.TrimSpace(raw.LastName),
 		MailboxAddress: strings.TrimSpace(raw.MailBoxAddress),
 		MailboxStatus:  strings.TrimSpace(raw.MailBoxStatus),
-		Role:           strings.TrimSpace(raw.Role),
+		Role:           role,
 		TimeZone:       strings.TrimSpace(raw.TimeZone),
 		ZUID:           strings.TrimSpace(string(raw.ZUID)),
 	}
