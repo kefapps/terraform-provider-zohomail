@@ -304,7 +304,7 @@ func mailboxStateFromRemote(ctx context.Context, current mailboxResourceModel, r
 		MailboxStatus:       types.StringValue(remote.MailboxStatus),
 		OneTimePassword:     current.OneTimePassword,
 		PrimaryEmailAddress: stringValueFromRemoteOrCurrent(remote.MailboxAddress, current.PrimaryEmailAddress),
-		Role:                types.StringValue(remote.Role),
+		Role:                stringValueFromRemoteOrCurrent(remote.Role, current.Role),
 		TimeZone:            stringValueFromRemoteOrCurrent(remote.TimeZone, current.TimeZone),
 	}, diags
 }

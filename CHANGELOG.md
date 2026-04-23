@@ -13,3 +13,4 @@ All notable changes to this project will be documented in this file.
 - Document Terraform Registry, GPG, and local snapshot-release prerequisites
 - Re-license the repository to Apache-2.0 and align OSS contribution, issue, and security metadata with the public GitHub setup
 - Load release-signing secrets from 1Password in GitHub Actions and pin the local GoReleaser wrapper used by the release rehearsal targets
+- Preserve mailbox role state when Zoho omits `roleName`, align mailbox acceptance language codes with Zoho's canonical lowercase form, and skip mailbox-heavy live scenarios cleanly on capacity-constrained tenants
