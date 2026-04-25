@@ -1,91 +1,26 @@
-# terraform-provider-zohomail
+# Terraform Provider for Zoho Mail
 
-`terraform-provider-zohomail` is a standalone Terraform provider for **Zoho Mail only**.
+> Disclaimer: this project is independent, unaffiliated with Zoho, and not endorsed by Zoho Corporation. I am building it for fun, usefulness, and the strange joy of making email administration declarative.
+>
+> Dear Zoho team: this provider is handcrafted for free; a lifetime Zoho One license would be a delightfully practical thank-you, and would make it much easier to teach Terraform how to manage the rest of the Zoho universe.
 
-This repository targets the public provider source address `kefapps/zohomail` and implements an admin-focused v1 surface on top of the official Zoho Mail APIs.
+`terraform-provider-zohomail` is a standalone Terraform provider for **Zoho Mail administration**.
+
+It targets the public provider source address `kefapps/zohomail` and focuses on the v1 admin workflows that are useful to infrastructure teams: domains, onboarding, mailboxes, aliases, internal forwarding, DKIM, catch-all, and subdomain stripping.
 
 The repository is licensed under [Apache-2.0](LICENSE).
 
-## Requirements
+## Quick Links
 
-- Go `>= 1.25.8`
-- Terraform `>= 1.14`
+- [Provider documentation](docs/index.md)
+- [Getting started](docs/getting-started.md)
+- [Development guide](docs/development.md)
+- [Testing and acceptance policy](docs/ops/testing.md)
+- [Release policy](docs/ops/release.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
-## Build and Test
-
-```bash
-make fmt
-make test
-make build
-make generate
-go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name zohomail
-```
-
-This is the default local validation gate for normal provider work. Pull requests are also expected to pass the GitHub Actions checks `Build`, `Unit Tests`, `Generate Check`, and `Docs Validate`, while live acceptance remains local-only.
-
-## Acceptance Tests
-
-The acceptance entrypoint exists for live Zoho Mail environments:
-
-```bash
-make testacc
-```
-
-Acceptance runs are **local only** for now. They are expected when a change touches Zoho Mail API behavior, Terraform lifecycle, import handling, idempotence, or drift detection.
-
-To bootstrap or refresh Zoho OAuth tokens in a local `.env.testacc` created from `.env.testacc.example`, run:
-
-```bash
-make zoho-token
-```
-
-Base acceptance environment:
-
-- `TF_ACC=1`
-- `ZOHOMAIL_ACCESS_TOKEN`
-- `ZOHOMAIL_DATA_CENTER`
-- `ZOHOMAIL_ORGANIZATION_ID`
-
-Any scenario that creates disposable Zoho domains or mailboxes also needs:
-
-- `ZOHOMAIL_TEST_DNS_BASE_DOMAIN`
-
-Domain and DNS acceptance environment:
-
-- `ZOHOMAIL_TEST_DNS_PROVIDER=cloudflare`
-- `ZOHOMAIL_TEST_DNS_ZONE_NAME`
-- `CLOUDFLARE_API_TOKEN`
-
-Optional DNS tuning and overrides:
-
-- `ZOHOMAIL_TEST_DNS_RESOLVER`
-- `ZOHOMAIL_TEST_DNS_TIMEOUT`
-- `ZOHOMAIL_TEST_ENABLE_SLOW_DNS_VERIFICATION`
-- `ZOHOMAIL_TEST_ENABLE_ADVANCED_DOMAIN_FEATURES`
-- `ZOHOMAIL_TEST_ENABLE_MAILBOX_LIFECYCLE`
-- `ZOHOMAIL_TEST_ENABLE_MULTI_MAILBOX`
-- `ZOHOMAIL_TEST_DNS_SPF_VALUE`
-- `ZOHOMAIL_TEST_DNS_MX_10`
-- `ZOHOMAIL_TEST_DNS_MX_20`
-- `ZOHOMAIL_TEST_DNS_MX_50`
-
-Zoho's official admin docs state that MX changes may take **6 to 24 hours** to take effect, and SPF or DKIM propagation may take **4 to 48 hours**. The default live suite therefore keeps MX, SPF, and DKIM verification out of the fast path. Set `ZOHOMAIL_TEST_ENABLE_SLOW_DNS_VERIFICATION=1` and increase `ZOHOMAIL_TEST_DNS_TIMEOUT` if you explicitly want to run those long verification checks.
-
-Some tenant capabilities are intentionally opt-in because they are not guaranteed on every Zoho Mail plan. Set `ZOHOMAIL_TEST_ENABLE_ADVANCED_DOMAIN_FEATURES=1` to run the live `domain_catch_all` and `domain_subdomain_stripping` scenarios, set `ZOHOMAIL_TEST_ENABLE_MAILBOX_LIFECYCLE=1` when the tenant has at least one spare mailbox license for create/import/update mailbox flows, and set `ZOHOMAIL_TEST_ENABLE_MULTI_MAILBOX=1` when the tenant has enough mailbox licenses for scenarios that create multiple users in the same run.
-
-The acceptance suite currently implements these live scenarios:
-
-- `zohomail_mailbox`: opt-in mailbox-lifecycle path covers create, import, update `display_name`, update `role`, and replacement on create-only fields
-- `zohomail_mailbox_alias`: opt-in mailbox-lifecycle path covers create, import, delete, and drift when the alias disappears remotely
-- `zohomail_mailbox_forwarding`: mailbox-lifecycle path covers rejection of external domains; the multi-mailbox path for create, update, import, and delete is opt-in via `ZOHOMAIL_TEST_ENABLE_MULTI_MAILBOX=1`
-- `zohomail_domain`: create, import, delete, refresh of verification and hosting state
-- `zohomail_domain_onboarding`: fast live path covers TXT verification, mail hosting, import, state-only delete; slow opt-in path covers MX and SPF verification after extended propagation
-- `zohomail_domain_alias`: create, import, delete
-- `zohomail_domain_dkim`: fast live path covers create, set default, import, delete; slow opt-in path covers public-key verification after extended propagation
-- `zohomail_domain_catch_all`: opt-in advanced-feature and multi-mailbox path covers create, update, import, and drift when the catch-all disappears remotely
-- `zohomail_domain_subdomain_stripping`: opt-in advanced-feature path covers create, import, and delete
-
-## Provider Configuration
+## Example Usage
 
 ```terraform
 terraform {
@@ -103,15 +38,17 @@ provider "zohomail" {
 }
 ```
 
-All three arguments also support environment fallbacks:
+The provider also reads these environment variables:
 
 - `ZOHOMAIL_ORGANIZATION_ID`
 - `ZOHOMAIL_ACCESS_TOKEN`
 - `ZOHOMAIL_DATA_CENTER`
 
-Supported `data_center` values are: `us`, `eu`, `in`, `au`, `jp`, `ca`, `cn`, `ae`, `sa`.
+Supported `data_center` values are `us`, `eu`, `in`, `au`, `jp`, `ca`, `cn`, `ae`, and `sa`.
 
-## V1 Resources
+## Resources
+
+The current v1 surface includes:
 
 - `zohomail_mailbox`
 - `zohomail_mailbox_alias`
@@ -123,103 +60,35 @@ Supported `data_center` values are: `us`, `eu`, `in`, `au`, `jp`, `ca`, `cn`, `a
 - `zohomail_domain_catch_all`
 - `zohomail_domain_subdomain_stripping`
 
-The user-facing need “plusieurs adresses du même domaine arrivent sur un seul compte” is handled primarily via `zohomail_mailbox_alias`.
+`zohomail_mailbox_alias` is the primary answer for the common need: “several addresses on the same domain should land in one mailbox.”
 
-`zohomail_mailbox_forwarding` is intentionally narrower in v1:
+## Local Development
 
-- it manages forwarding targets for a mailbox
-- it only accepts target addresses that belong to domains already attached to that mailbox
-- it does not attempt external forwarding verification flows
+Requirements:
 
-## Install Locally
+- Go `>= 1.25.8`
+- Terraform `>= 1.14`
 
-Install the provider binary into your Go bin directory:
+Run the normal local validation gate with:
 
 ```bash
-make install
+make fmt
+make test
+make build
+make generate
+go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs validate --provider-name zohomail
 ```
 
-For local Terraform development, install the provider binary and point Terraform to the directory that contains it. If `GOBIN` is unset, this is usually `$(go env GOPATH)/bin`.
+Use `make install` when you want to install the provider binary locally. See [Getting started](docs/getting-started.md) for local Terraform usage and development overrides.
 
-Use a CLI config file with a development override:
-
-```hcl
-provider_installation {
-  dev_overrides {
-    "kefapps/zohomail" = "/path/to/your/go/bin"
-  }
-
-  direct {}
-}
-```
-
-Then use the provider in Terraform:
-
-```terraform
-terraform {
-  required_providers {
-    zohomail = {
-      source = "kefapps/zohomail"
-    }
-  }
-}
-
-provider "zohomail" {
-  organization_id = var.zohomail_organization_id
-  access_token    = var.zohomail_access_token
-  data_center     = var.zohomail_data_center
-}
-```
-
-For an unpublished provider, use `terraform plan` or `terraform apply` directly once the `dev_overrides` entry is in place. Do not rely on `terraform init` to install `kefapps/zohomail` from the public Registry before the provider is published there, because Terraform will still try to resolve the source address remotely.
-
-## License
-
-This repository is published under `Apache-2.0`. See `LICENSE`.
-
-That choice keeps the provider easy to adopt in normal Terraform usage, downstream modules, and larger infrastructure codebases while preserving an explicit patent grant and a familiar permissive OSS posture.
-
-Source files that are part of the provider implementation carry SPDX headers aligned with `Apache-2.0`.
 ## Documentation
 
-Provider documentation is generated with `tfplugindocs`:
+Generated Terraform Registry markdown lives under `docs/`, with canonical snippets in `examples/resources/*/resource.tf`.
 
-```bash
-make generate
-```
+Run `make generate` after any schema, example, or documentation template change. The provider index template lives in [templates/index.md.tmpl](templates/index.md.tmpl).
 
-The provider index template lives in `templates/index.md.tmpl` and the generated Registry markdown is written to `docs/`.
+## Release Status
 
-`examples/resources/*/resource.tf` are the canonical example snippets and should stay aligned with both schema behavior and generated docs.
+Release automation is present, but public publication is still gated on Terraform Registry onboarding and release-signing setup. The first public release target is `v0.1.0`.
 
-Operational runbooks:
-
-- `docs/ops/testing.md`
-- `docs/ops/release.md`
-
-## Contributing And Security
-
-- License and contribution terms: `LICENSE`
-- Contribution workflow and validation expectations: `CONTRIBUTING.md`
-- Vulnerability reporting posture: `SECURITY.md`
-- Maintainer and automation guardrails: `AGENTS.md`
-
-Use the GitHub issue templates for bugs and feature requests. Do not open a public issue for a suspected security vulnerability.
-
-## Release Policy
-
-Release automation now lives in:
-
-- `.github/workflows/release.yml`
-- `.goreleaser.yml`
-
-Current release posture:
-
-- keep `CHANGELOG.md` updated under `Unreleased`
-- keep docs/examples/generated markdown current on each provider change
-- validate release config locally with `make release-check` and `make release-snapshot`
-- load release signing material from `1Password`, bootstrapped in GitHub Actions through `OP_SERVICE_ACCOUNT_TOKEN`
-- keep non-secret `op://` references in GitHub Actions variables `OP_GPG_PRIVATE_KEY_REF` and `OP_GPG_PASSPHRASE_REF`
-- treat provider tags as `v*` semver tags cut from `main`
-- keep public publication gated on `1Password` release-signing access plus Terraform Registry onboarding for `kefapps/zohomail`
-- target `v0.1.0` as the first public release
+See [docs/ops/release.md](docs/ops/release.md) for the full release checklist.
