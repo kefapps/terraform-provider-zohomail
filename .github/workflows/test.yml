@@ -1,10 +1,12 @@
 # Terraform Provider validation workflow.
 name: Tests
 
-# MES-4165 / KEF-675 : plus aucun déclencheur automatique (runners
-# GitHub-hosted facturés sur chaque PR/push). Exécution manuelle uniquement ;
-# ré-armer pull_request/push après décision de pool self-hosted.
+# MES-4165 / KEF-675 : déclencheurs PR/push restaurés, jobs routés sur un
+# pool self-hosted dédié (zéro runner GitHub-hosted, zéro fallback). Pool
+# absent ⇒ runs en file.
 on:
+  pull_request:
+  push:
   workflow_dispatch:
 
 permissions:
@@ -13,7 +15,7 @@ permissions:
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, terraform-provider-zohomail-tests-linux]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -26,7 +28,7 @@ jobs:
 
   unit:
     name: Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, terraform-provider-zohomail-tests-linux]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -39,7 +41,7 @@ jobs:
 
   generate-check:
     name: Generate Check
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, terraform-provider-zohomail-tests-linux]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -58,7 +60,7 @@ jobs:
 
   docs-validate:
     name: Docs Validate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, terraform-provider-zohomail-tests-linux]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

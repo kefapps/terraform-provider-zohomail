@@ -1,10 +1,14 @@
 # Terraform Provider release workflow.
 name: Release
 
-# MES-4165 / KEF-675 : plus de release automatique au push de tag (runner
-# GitHub-hosted facturé). Lancer en manuel en visant le tag à publier —
-# goreleaser doit partir de l'état exact du tag, jamais de la branche.
+# MES-4165 / KEF-675 : release au push de tag restaurée + déclenchement
+# manuel visant le tag publié (goreleaser part de l'état exact du tag,
+# jamais de la branche). Job routé sur le pool self-hosted de déploiement
+# (clé GPG) ; zéro fallback, pool absent ⇒ run en file.
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -19,7 +23,7 @@ permissions:
 
 jobs:
   goreleaser:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, terraform-provider-zohomail-deploy-linux]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
