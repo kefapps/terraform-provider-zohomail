@@ -1,9 +1,11 @@
 # Terraform Provider validation workflow.
 name: Tests
 
+# MES-4165 / KEF-675 : plus aucun déclencheur automatique (runners
+# GitHub-hosted facturés sur chaque PR/push). Exécution manuelle uniquement ;
+# ré-armer pull_request/push après décision de pool self-hosted.
 on:
-  pull_request:
-  push:
+  workflow_dispatch:
 
 permissions:
   contents: read
